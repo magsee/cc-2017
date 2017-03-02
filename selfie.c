@@ -7028,6 +7028,9 @@ void printUsage() {
 int selfie() {
   int* option;
 
+  print("This is Maximilian Strasser's selfie");
+  println();
+
   if (numberOfRemainingArguments() == 0)
     printUsage();
   else {
