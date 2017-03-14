@@ -1,7 +1,7 @@
-void countdown_at_idx(int* ptr, int idx);
-
-int SIZEOFINT = 4;
 int VALUESSIZE = 20;
+int counter;
+
+void countdown_at_idx(int* ptr, int idx);
 
 void countdown_at_idx(int* ptr, int idx) {
 
@@ -17,6 +17,7 @@ void countdown_at_idx(int* ptr, int idx) {
       *(ptr + idx) = *(ptr + idx) - 2;
     else
       *(ptr + idx) = *(ptr + idx) - 1;
+    counter = counter + 1;
   }
 
 }
@@ -25,9 +26,11 @@ int main(int argc, int* argv) {
   int i;
   int* values;
 
-  initLibrary();
+  //initLibrary();
 
-  values = malloc(VALUESSIZE * SIZEOFINT);
+  counter = 0;
+
+  values = malloc(VALUESSIZE * 4);
 
   i = 0;
 
@@ -39,24 +42,9 @@ int main(int argc, int* argv) {
   i = 0;
 
   while (i < VALUESSIZE) {
-    printInteger(*(values + i));
-    println();
-    i = i + 1;
-  }
-
-  i = 0;
-
-  while (i < VALUESSIZE) {
     countdown_at_idx(values, i);
     i = i + 1;
   }
 
-  i = 0;
-
-  while (i < VALUESSIZE) {
-    printInteger(*(values + i));
-    println();
-    i = i + 1;
-  }
-
+  return counter;
 }
