@@ -106,8 +106,9 @@ int  stringLength(int* s);
 void stringReverse(int* s);
 int  stringCompare(int* s, int* t);
 
-int  atoi(int* s);
+int  atoi(int* s, int base);
 int* itoa(int n, int* s, int b, int a, int p);
+int getBase();
 
 int fixedPointRatio(int a, int b);
 
@@ -337,6 +338,8 @@ int mayBeINTMIN = 0; // allow INT_MIN if '-' was scanned before
 int isINTMIN    = 0; // flag to indicate that INT_MIN was scanned
 
 int character; // most recently read character
+
+int base; // base of integer
 
 int numberOfReadCharacters = 0;
 
@@ -1404,7 +1407,7 @@ int stringCompare(int* s, int* t) {
       return 0;
 }
 
-int atoi(int* s) {
+int atoi(int* s, int base) {
   int i;
   int n;
   int c;
@@ -1427,12 +1430,23 @@ int atoi(int* s) {
     if (c < 0)
       // c was not a decimal digit
       return -1;
-    else if (c > 9)
+    else if (c > base - 1) {
+      if (base != 16)
       // c was not a decimal digit
-      return -1;
+        return -1;
+      else {
+        if (c < 17) // A
+          return -1;
+        else if (c > 22) // F
+          return -1;
+      }
+    }
 
-    // assert: s contains a decimal number, that is, with base 10
-    n = n * 10 + c;
+    if (base == 16)
+      if (c > 9)
+        c = c - 7;
+
+    n = n * base + c;
 
     // go to the next digit
     i = i + 1;
@@ -1598,6 +1612,28 @@ int* itoa(int n, int* s, int b, int a, int p) {
   stringReverse(s);
 
   return s;
+}
+
+int getBase() {
+
+  if (character != '0') {
+    return 10;
+  } else if (character == '0') {
+    getCharacter();
+  }
+
+  if (character == 'b') {
+    getCharacter();
+    return 2;
+  } else if (character == '0') {
+    getCharacter();
+    return 8;
+  } else if (character == 'x') {
+    getCharacter();
+    return 16;
+  } else {
+    return 0;
+  }
 }
 
 int fixedPointRatio(int a, int b) {
@@ -1931,8 +1967,13 @@ int isCharacterDigit() {
   if (character >= '0')
     if (character <= '9')
       return 1;
-    else
+    else {
+      if (base == 16)
+        if (character >= 'A')
+          if (character <= 'Z')
+            return 1;
       return 0;
+    }
   else
     return 0;
 }
@@ -1983,6 +2024,8 @@ int identifierOrKeyword() {
 void getSymbol() {
   int i;
 
+  base = 0;
+
   // reset previously scanned symbol
   symbol = SYM_EOF;
 
@@ -2020,6 +2063,17 @@ void getSymbol() {
 
         i = 0;
 
+        base = getBase();
+
+        if (base == 0) {
+
+          base = 10;
+
+          storeCharacter(integer, i, 0);
+
+          i = i + 1;
+        }
+
         while (isCharacterDigit()) {
           if (i >= maxIntegerLength) {
             syntaxErrorMessage((int*) "integer out of bound");
@@ -2036,7 +2090,7 @@ void getSymbol() {
 
         storeCharacter(integer, i, 0); // null-terminated string
 
-        literal = atoi(integer);
+        literal = atoi(integer, base);
 
         if (literal < 0) {
           if (literal == INT_MIN) {
@@ -6942,7 +6996,7 @@ int selfie_run(int engine, int machine, int debugger) {
     exit(-1);
   }
 
-  initMemory(atoi(peekArgument()));
+  initMemory(atoi(peekArgument(), 10));
 
   // pass binary name as first argument by replacing memory size
   setArgument(binaryName);
