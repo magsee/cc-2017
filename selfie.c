@@ -180,22 +180,22 @@ int* binary_buffer;    // buffer for binary I/O
 // WINDOWS: 32768 = 0x8000 = _O_BINARY (0x8000) | _O_RDONLY (0x0000)
 // since LINUX/MAC do not seem to mind about _O_BINARY set
 // we use the WINDOWS flags as default
-int O_RDONLY = 32768;
+int O_RDONLY = 0b1000000000000000;
 
 // flags for opening write-only files
 // MAC: 1537 = 0x0601 = O_CREAT (0x0200) | O_TRUNC (0x0400) | O_WRONLY (0x0001)
-int MAC_O_CREAT_TRUNC_WRONLY = 1537;
+int MAC_O_CREAT_TRUNC_WRONLY = 0x0601;
 
 // LINUX: 577 = 0x0241 = O_CREAT (0x0040) | O_TRUNC (0x0200) | O_WRONLY (0x0001)
-int LINUX_O_CREAT_TRUNC_WRONLY = 577;
+int LINUX_O_CREAT_TRUNC_WRONLY = 0x0241;
 
 // WINDOWS: 33537 = 0x8301 = _O_BINARY (0x8000) | _O_CREAT (0x0100) | _O_TRUNC (0x0200) | _O_WRONLY (0x0001)
-int WINDOWS_O_BINARY_CREAT_TRUNC_WRONLY = 33537;
+int WINDOWS_O_BINARY_CREAT_TRUNC_WRONLY = 0x8301;
 
 // flags for rw-r--r-- file permissions
 // 420 = 00644 = S_IRUSR (00400) | S_IWUSR (00200) | S_IRGRP (00040) | S_IROTH (00004)
 // these flags seem to be working for LINUX, MAC, and WINDOWS
-int S_IRUSR_IWUSR_IRGRP_IROTH = 420;
+int S_IRUSR_IWUSR_IRGRP_IROTH = 00644;
 
 // ------------------------ GLOBAL VARIABLES -----------------------
 
@@ -1961,13 +1961,25 @@ int isCharacterLetter() {
 
 int isCharacterDigit(int base) {
   // ASCII codes for digits are in a contiguous interval
+
+  if (base == 2) {
+    if (character >= '0')
+      if (character <= '1')
+        return 1;
+    return 0;
+  } else if (base == 8) {
   if (character >= '0')
-    if (character <= '9')
+    if (character <= '7')
       return 1;
+    return 0;
+  } else
+    if (character >= '0')
+      if (character <= '9')
+        return 1;
     else {
       if (base == 16)
         if (character >= 'A')
-          if (character <= 'Z')
+          if (character <= 'F')
             return 1;
       return 0;
     }
