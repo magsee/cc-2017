@@ -277,7 +277,7 @@ int isCharacterWhitespace();
 int findNextCharacter();
 
 int isCharacterLetter();
-int isCharacterDigit();
+int isCharacterDigit(int base);
 int isCharacterLetterOrDigitOrUnderscore();
 int isCharacterNotDoubleQuoteOrNewLineOrEOF();
 
@@ -321,7 +321,7 @@ int SYM_STRING       = 27; // string
 int* SYMBOLS; // strings representing symbols
 
 int maxIdentifierLength = 64; // maximum number of characters in an identifier
-int maxIntegerLength    = 10; // maximum number of characters in an integer
+int maxIntegerLength();       // maximum number of characters in an integer
 int maxStringLength     = 128; // maximum number of characters in a string
 
 // ------------------------ GLOBAL VARIABLES -----------------------
@@ -338,8 +338,6 @@ int mayBeINTMIN = 0; // allow INT_MIN if '-' was scanned before
 int isINTMIN    = 0; // flag to indicate that INT_MIN was scanned
 
 int character; // most recently read character
-
-int base; // base of integer
 
 int numberOfReadCharacters = 0;
 
@@ -1625,8 +1623,7 @@ int getBase() {
   if (character == 'b') {
     getCharacter();
     return 2;
-  } else if (character == '0') {
-    getCharacter();
+  } else if (isCharacterDigit(10)) {
     return 8;
   } else if (character == 'x') {
     getCharacter();
@@ -1962,7 +1959,7 @@ int isCharacterLetter() {
     return 0;
 }
 
-int isCharacterDigit() {
+int isCharacterDigit(int base) {
   // ASCII codes for digits are in a contiguous interval
   if (character >= '0')
     if (character <= '9')
@@ -1981,7 +1978,7 @@ int isCharacterDigit() {
 int isCharacterLetterOrDigitOrUnderscore() {
   if (isCharacterLetter())
     return 1;
-  else if (isCharacterDigit())
+  else if (isCharacterDigit(10))
     return 1;
   else if (character == CHAR_UNDERSCORE)
     return 1;
@@ -2023,8 +2020,7 @@ int identifierOrKeyword() {
 
 void getSymbol() {
   int i;
-
-  base = 0;
+  int base;
 
   // reset previously scanned symbol
   symbol = SYM_EOF;
@@ -2057,13 +2053,14 @@ void getSymbol() {
 
         symbol = identifierOrKeyword();
 
-      } else if (isCharacterDigit()) {
+      } else if (isCharacterDigit(10)) {
         // accommodate integer and null for termination
-        integer = malloc(maxIntegerLength + 1);
-
-        i = 0;
 
         base = getBase();
+
+        integer = malloc(maxIntegerLength(base) + 1);
+
+        i = 0;
 
         if (base == 0) {
 
@@ -2074,8 +2071,8 @@ void getSymbol() {
           i = i + 1;
         }
 
-        while (isCharacterDigit()) {
-          if (i >= maxIntegerLength) {
+        while (isCharacterDigit(base)) {
+          if (i >= maxIntegerLength(base)) {
             syntaxErrorMessage((int*) "integer out of bound");
 
             exit(-1);
@@ -2274,6 +2271,17 @@ void getSymbol() {
 
     numberOfScannedSymbols = numberOfScannedSymbols + 1;
   }
+}
+
+int maxIntegerLength(int base) {
+  if (base == 10)
+    return 10;
+  else if (base == 2)
+    return 32;
+  else if (base == 8)
+    return 11;
+  else if (base == 16)
+    return 8;
 }
 
 // -----------------------------------------------------------------
