@@ -19,3 +19,4 @@ clean:
 	rm -rf *.m
 	rm -rf *.s
 	rm -rf selfie
+	rm -rf selfie.exe
