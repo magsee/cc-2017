@@ -55,7 +55,9 @@ statement        = call ";" | while | if | return ";" |
 
 call             = identifier "(" [ expression { "," expression } ] ")" .
 
-expression       = simpleExpression [ ( "==" | "!=" | "<" | ">" | "<=" | ">=" ) simpleExpression ] .
+expression       = shiftExpression [ ( "==" | "!=" | "<" | ">" | "<=" | ">=" ) shiftExpression ] .
+
+shiftExpression  = simpleExpression { ( "<<" | ">>" ) simpleExpression } .
 
 simpleExpression = [ "-" ] term { ( "+" | "-" ) term } .
 
