@@ -4025,10 +4025,7 @@ void gr_cstar() {
 void emitLeftShiftBy(int b) {
   // assert: 0 <= b < 15
 
-  // load multiplication factor less than 2^15 to avoid sign extension
-  emitIFormat(OP_ADDIU, REG_ZR, nextTemporary(), twoToThePowerOf(b));
-  emitRFormat(OP_SPECIAL, currentTemporary(), nextTemporary(), 0, 0, FCT_MULTU);
-  emitRFormat(OP_SPECIAL, 0, 0, currentTemporary(), 0, FCT_MFLO);
+  emitRFormat(OP_SPECIAL, 0, currentTemporary(), currentTemporary(), b, FCT_SLL);
 }
 
 void emitMainEntry() {
@@ -6312,7 +6309,8 @@ void fct_sll() {
   }
 
   if (interpret) {
-    *(registers+rd) = *(registers+rt) << shamt;
+    //*(registers+rd) = *(registers+rt) << shamt;
+    *(registers+rd) = leftShift(*(registers+rt), shamt);
 
     pc = pc + WORDSIZE;
   }
@@ -6354,7 +6352,8 @@ void fct_srl() {
   }
 
   if (interpret) {
-    *(registers+rd) = *(registers+rt) >> shamt;
+    //*(registers+rd) = *(registers+rt) >> shamt;
+    *(registers+rd) = rightShift(*(registers+rt), shamt);
 
     pc = pc + WORDSIZE;
   }
@@ -6396,7 +6395,8 @@ void fct_sllv() {
   }
 
   if (interpret) {
-    *(registers+rd) = *(registers+rt) << *(registers+rs);
+    //*(registers+rd) = *(registers+rt) << *(registers+rs);
+   *(registers+rd) = leftShift(*(registers+rt), *(registers+rs));
 
     pc = pc + WORDSIZE;
   }
@@ -6438,7 +6438,8 @@ void fct_srlv() {
   }
 
   if (interpret) {
-    *(registers+rd) = *(registers+rt) >> *(registers+rs);
+    //*(registers+rd) = *(registers+rt) >> *(registers+rs);
+    *(registers+rd) = rightShift(*(registers+rt), *(registers+rs));
 
     pc = pc + WORDSIZE;
   }
