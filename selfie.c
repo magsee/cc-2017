@@ -6285,26 +6285,29 @@ void op_sw() {
 
 void fct_sll() {
   if (debug) {
-    printFunction(function);
-    print((int*) " ");
-    printRegister(rd);
-    print((int*) ",");
-    printRegister(rs);
-    print((int*) ",");
-    printRegister(rt);
-    if (interpret) {
-      print((int*) ": ");
-      printRegister(rd);
-      print((int*) "=");
-      printInteger(*(registers+rd));
-      print((int*) ",");
-      printRegister(rs);
-      print((int*) "=");
-      printInteger(*(registers+rs));
-      print((int*) ",");
+    // if instruction is 0 sll becomes nop
+    if (ir == 0) {
+      opcode = FCT_NOP;
+      printOpcode(opcode);
+      println();
+    } else {
+      printFunction(function);
+      print((int*) " ");
       printRegister(rt);
-      print((int*) "=");
-      printInteger(*(registers+rt));
+      print((int*) ",");
+      printRegister(rd);
+      print((int*) ",");
+      printInteger(signExtend(shamt));
+      if (interpret) {
+        print((int*) ": ");
+        printRegister(rt);
+        print((int*) "=");
+        printInteger(*(registers+rt));
+        print((int*) ",");
+        printRegister(rd);
+        print((int*) "=");
+        printInteger(*(registers+rd));
+      }
     }
   }
 
@@ -6316,13 +6319,15 @@ void fct_sll() {
   }
 
   if (debug) {
-    if (interpret) {
-      print((int*) " -> ");
-      printRegister(rd);
-      print((int*) "=");
-      printInteger(*(registers+rd));
+    if(ir != 0) {
+      if (interpret) {
+        print((int*) " -> ");
+        printRegister(rd);
+        print((int*) "=");
+        printInteger(*(registers+rd));
+      }
+      println();
     }
-    println();
   }
 }
 
@@ -6330,24 +6335,20 @@ void fct_srl() {
   if (debug) {
     printFunction(function);
     print((int*) " ");
+    printRegister(rt);
+    print((int*) ",");
     printRegister(rd);
     print((int*) ",");
-    printRegister(rs);
-    print((int*) ",");
-    printRegister(rt);
+    printInteger(signExtend(shamt));
     if (interpret) {
       print((int*) ": ");
-      printRegister(rd);
-      print((int*) "=");
-      printInteger(*(registers+rd));
-      print((int*) ",");
-      printRegister(rs);
-      print((int*) "=");
-      printInteger(*(registers+rs));
-      print((int*) ",");
       printRegister(rt);
       print((int*) "=");
       printInteger(*(registers+rt));
+      print((int*) ",");
+      printRegister(rd);
+      print((int*) "=");
+      printInteger(*(registers+rd));
     }
   }
 
