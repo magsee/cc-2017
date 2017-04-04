@@ -96,7 +96,6 @@ void initLibrary();
 void resetLibrary();
 
 int twoToThePowerOf(int p);
-int leftShift(int n, int b);
 int rightShift(int n, int b);
 
 int  loadCharacter(int* s, int i);
@@ -385,6 +384,8 @@ void initScanner () {
   *(SYMBOLS + SYM_MOD)          = (int) "%";
   *(SYMBOLS + SYM_CHARACTER)    = (int) "character";
   *(SYMBOLS + SYM_STRING)       = (int) "string";
+  *(SYMBOLS + SYM_LSHIFT)       = (int) "<<";
+  *(SYMBOLS + SYM_RSHIFT)       = (int) ">>";
 
   character = CHAR_EOF;
   symbol    = SYM_EOF;
@@ -1311,12 +1312,6 @@ int twoToThePowerOf(int p) {
   return *(power_of_two_table + p);
 }
 
-int leftShift(int n, int b) {
-  // assert: b >= 0;
-
-  return n << b;
-}
-
 int rightShift(int n, int b) {
   // assert: b >= 0
 
@@ -1350,7 +1345,7 @@ int loadCharacter(int* s, int i) {
 
   // shift to-be-loaded character to the left resetting all bits to the left
   // then shift to-be-loaded character all the way to the right and return
-  return rightShift(leftShift(*(s + a), ((SIZEOFINT - 1) - (i % SIZEOFINT)) * 8), (SIZEOFINT - 1) * 8);
+  return rightShift(((*(s + a)) << (((SIZEOFINT - 1) - (i % SIZEOFINT)) * 8)), (SIZEOFINT - 1) * 8);
 }
 
 int* storeCharacter(int* s, int i, int c) {
@@ -1363,7 +1358,7 @@ int* storeCharacter(int* s, int i, int c) {
 
   // subtract the to-be-overwritten character resetting its bits in s
   // then add c setting its bits at the i-th position in s
-  *(s + a) = (*(s + a) - leftShift(loadCharacter(s, i), (i % SIZEOFINT) * 8)) + leftShift(c, (i % SIZEOFINT) * 8);
+  *(s + a) = (*(s + a) - (loadCharacter(s, i) << (i % SIZEOFINT) * 8)) + (c << ((i % SIZEOFINT) * 8));
 
   return s;
 }
@@ -1522,7 +1517,7 @@ int* itoa(int n, int* s, int b, int a, int p) {
         i = 1;
       } else {
         // reset msb, restore below
-        n   = rightShift(leftShift(n, 1), 1);
+        n   = rightShift((n << 1), 1);
         msb = 1;
       }
     }
@@ -2732,7 +2727,7 @@ void load_integer(int value) {
       emitLeftShiftBy(14);
 
       // and finally add 14 lsbs
-      emitIFormat(OP_ADDIU, currentTemporary(), currentTemporary(), rightShift(leftShift(value, 18), 18));
+      emitIFormat(OP_ADDIU, currentTemporary(), currentTemporary(), rightShift((value << 18), 18));
     } else {
       // load 14 msbs of a 31-bit number first
       emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), rightShift(value, 17));
@@ -2740,12 +2735,12 @@ void load_integer(int value) {
       emitLeftShiftBy(14);
 
       // then add the next 14 msbs
-      emitIFormat(OP_ADDIU, currentTemporary(), currentTemporary(), rightShift(leftShift(value, 15), 18));
+      emitIFormat(OP_ADDIU, currentTemporary(), currentTemporary(), rightShift((value << 15), 18));
 
       emitLeftShiftBy(3);
 
       // and finally add the remaining 3 lsbs
-      emitIFormat(OP_ADDIU, currentTemporary(), currentTemporary(), rightShift(leftShift(value, 29), 29));
+      emitIFormat(OP_ADDIU, currentTemporary(), currentTemporary(), rightShift((value << 29), 29));
     }
   } else {
     // load largest positive 16-bit number with a single bit set: 2^14
@@ -4270,7 +4265,7 @@ void printRegister(int reg) {
 // 32 bit
 //
 // +------+-----+-----+-----+-----+------+
-// |opcode| rs  | rt  | rd  |00000|fction|
+// |opcode| rs  | rt  | rd  |shamt|fction|
 // +------+-----+-----+-----+-----+------+
 //    6      5     5     5     5     6
 int encodeRFormat(int opcode, int rs, int rt, int rd, int shamt, int function) {
@@ -4279,7 +4274,7 @@ int encodeRFormat(int opcode, int rs, int rt, int rd, int shamt, int function) {
   // assert: 0 <= rt < 2^5
   // assert: 0 <= rd < 2^5
   // assert: 0 <= function < 2^6
-  return leftShift(leftShift(leftShift(leftShift(leftShift(opcode, 5) + rs, 5) + rt, 5) + rd, 5) + shamt, 6) + function;
+  return (((((((((opcode << 5) + rs) << 5) + rt) << 5) + rd) << 5) + shamt) << 6) + function;
 }
 
 // -----------------------------------------------------------------
@@ -4298,7 +4293,7 @@ int encodeIFormat(int opcode, int rs, int rt, int immediate) {
     // convert from 32-bit to 16-bit two's complement
     immediate = immediate + twoToThePowerOf(16);
 
-  return leftShift(leftShift(leftShift(opcode, 5) + rs, 5) + rt, 16) + immediate;
+  return (((((opcode << 5) + rs) << 5) + rt) << 16) + immediate;
 }
 
 // --------------------------------------------------------------
@@ -4311,7 +4306,7 @@ int encodeIFormat(int opcode, int rs, int rt, int immediate) {
 int encodeJFormat(int opcode, int instr_index) {
   // assert: 0 <= opcode < 2^6
   // assert: 0 <= instr_index < 2^26
-  return leftShift(opcode, 26) + instr_index;
+  return (opcode << 26) + instr_index;
 }
 
 // -----------------------------------------------------------------
@@ -4323,27 +4318,27 @@ int getOpcode(int instruction) {
 }
 
 int getRS(int instruction) {
-  return rightShift(leftShift(instruction, 6), 27);
+  return rightShift((instruction << 6), 27);
 }
 
 int getRT(int instruction) {
-  return rightShift(leftShift(instruction, 11), 27);
+  return rightShift((instruction << 11), 27);
 }
 
 int getRD(int instruction) {
-  return rightShift(leftShift(instruction, 16), 27);
+  return rightShift((instruction << 16), 27);
 }
 
 int getFunction(int instruction) {
-  return rightShift(leftShift(instruction, 26), 26);
+  return rightShift((instruction << 26), 26);
 }
 
 int getImmediate(int instruction) {
-  return rightShift(leftShift(instruction, 16), 16);
+  return rightShift((instruction << 16), 16);
 }
 
 int getInstrIndex(int instruction) {
-  return rightShift(leftShift(instruction, 6), 6);
+  return rightShift((instruction << 6), 6);
 }
 
 int signExtend(int immediate) {
@@ -4355,7 +4350,7 @@ int signExtend(int immediate) {
 }
 
 int getShamt(int instruction) {
-  return rightShift(leftShift(instruction, 21), 27);
+  return rightShift((instruction << 21), 27);
 }
 
 // --------------------------------------------------------------
@@ -6304,7 +6299,7 @@ void fct_sll() {
   }
 
   if (interpret) {
-    *(registers+rd) = leftShift(*(registers+rt), shamt);
+    *(registers+rd) = (*(registers+rt) << shamt);
 
     pc = pc + WORDSIZE;
   }
@@ -6386,7 +6381,7 @@ void fct_sllv() {
   }
 
   if (interpret) {
-    *(registers+rd) = leftShift(*(registers+rt), *(registers+rs));
+    *(registers+rd) = (*(registers+rt) << *(registers+rs));
 
     pc = pc + WORDSIZE;
   }
@@ -6460,7 +6455,7 @@ int encodeException(int exception, int parameter) {
     // convert from 32-bit to 16-bit two's complement
     parameter = parameter + twoToThePowerOf(16);
 
-  return leftShift(exception, 16) + parameter;
+  return (exception << 16) + parameter;
 }
 
 int decodeExceptionNumber(int status) {
@@ -6468,7 +6463,7 @@ int decodeExceptionNumber(int status) {
 }
 
 int decodeExceptionParameter(int status) {
-  return signExtend(rightShift(leftShift(status, 16), 16));
+  return signExtend(rightShift((status << 16), 16));
 }
 
 void printStatus(int status) {
@@ -7338,7 +7333,7 @@ void printUsage() {
 int selfie() {
   int* option;
 
-  print("This is Maximilian Strasser's selfie");
+  print((int*)"This is Maximilian Strasser's selfie");
   println();
 
   if (numberOfRemainingArguments() == 0)
