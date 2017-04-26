@@ -4426,7 +4426,7 @@ int encodeRFormat(int opcode, int rs, int rt, int rd, int shamt, int function) {
   // assert: 0 <= rt < 2^5
   // assert: 0 <= rd < 2^5
   // assert: 0 <= function < 2^6
-  return (((((((((opcode << 5) + rs) << 5) + rt) << 5) + rd) << 5) + shamt) << 6) + function;
+  return (((((((((opcode << 5) | rs) << 5) | rt) << 5) | rd) << 5) | shamt) << 6) | function;
 }
 
 // -----------------------------------------------------------------
@@ -4445,7 +4445,7 @@ int encodeIFormat(int opcode, int rs, int rt, int immediate) {
     // convert from 32-bit to 16-bit two's complement
     immediate = immediate + twoToThePowerOf(16);
 
-  return (((((opcode << 5) + rs) << 5) + rt) << 16) + immediate;
+  return (((((opcode << 5) | rs) << 5) | rt) << 16) | immediate;
 }
 
 // --------------------------------------------------------------
@@ -4458,7 +4458,7 @@ int encodeIFormat(int opcode, int rs, int rt, int immediate) {
 int encodeJFormat(int opcode, int instr_index) {
   // assert: 0 <= opcode < 2^6
   // assert: 0 <= instr_index < 2^26
-  return (opcode << 26) + instr_index;
+  return (opcode << 26) | instr_index;
 }
 
 // -----------------------------------------------------------------
@@ -4470,27 +4470,30 @@ int getOpcode(int instruction) {
 }
 
 int getRS(int instruction) {
-  return rightShift((instruction << 6), 27);
+  return rightShift((instruction & 0x3E00000), 21);
 }
 
 int getRT(int instruction) {
-  return rightShift((instruction << 11), 27);
+  return rightShift((instruction & 0x1F0000), 16);
 }
 
 int getRD(int instruction) {
-  return rightShift((instruction << 16), 27);
+  return rightShift((instruction & 0xF800), 11);
 }
 
 int getFunction(int instruction) {
-  return rightShift((instruction << 26), 26);
+  return (instruction & 0x3F);
+  //return rightShift((instruction << 26), 26);
 }
 
 int getImmediate(int instruction) {
-  return rightShift((instruction << 16), 16);
+  return (instruction & 0xFFFF);
+  //return rightShift((instruction << 16), 16);
 }
 
 int getInstrIndex(int instruction) {
-  return rightShift((instruction << 6), 6);
+  return (instruction & 0x3FFFFFF);
+  //return rightShift((instruction << 6), 6);
 }
 
 int signExtend(int immediate) {
@@ -4502,7 +4505,7 @@ int signExtend(int immediate) {
 }
 
 int getShamt(int instruction) {
-  return rightShift((instruction << 21), 27);
+  return rightShift((instruction & 0x7C0), 6);
 }
 
 // --------------------------------------------------------------

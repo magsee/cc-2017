@@ -35,50 +35,52 @@ letter = "a" | ... | "z" | "A" | ... | "Z" .
 C\* Grammar:
 
 ```
-cstar            = { type identifier [ "=" [ cast ] [ "-" ] literal ] ";" |
-                   ( "void" | type ) identifier procedure } .
+cstar                = { type identifier [ "=" [ cast ] [ "-" ] literal ] ";" |
+                      ( "void" | type ) identifier procedure } .
 
-type             = "int" [ "*" ] .
+type                 = "int" [ "*" ] .
 
-cast             = "(" type ")" .
+cast                 = "(" type ")" .
 
-literal          = integer | character .
+literal              = integer | character .
 
-procedure        = "(" [ variable { "," variable } ] ")"
-                    ( ";" | "{" { variable ";" } { statement } "}" ) .
+procedure            = "(" [ variable { "," variable } ] ")"
+                      ( ";" | "{" { variable ";" } { statement } "}" ) .
 
-variable         = type identifier .
+variable             = type identifier .
 
-statement        = call ";" | while | if | return ";" |
-                   ( [ "*" ] identifier | "*" "(" expression ")" )
-                     "=" expression ";" .
+statement            = call ";" | while | if | return ";" |
+                      ( [ "*" ] identifier | "*" "(" expression ")" )
+                      "=" expression ";" .
 
-call             = identifier "(" [ expression { "," expression } ] ")" .
+call                 = identifier "(" [ expression { "," expression } ] ")" .
 
-expression       = shiftExpression [ ( "==" | "!=" | "<" | ">" | "<=" | ">=" ) shiftExpression ] .
+expression           = comparisonExpression { ( "&" | "|" ) comparisonExpression }
 
-shiftExpression  = simpleExpression { ( "<<" | ">>" ) simpleExpression } .
+comparisonExpression = shiftExpression [ ( "==" | "!=" | "<" | ">" | "<=" | ">=" ) shiftExpression ] .
 
-simpleExpression = [ "-" ] term { ( "+" | "-" ) term } .
+shiftExpression      = simpleExpression { ( "<<" | ">>" ) simpleExpression }.
 
-term             = factor { ( "*" | "/" | "%" ) factor } .
+simpleExpression     = [ "-" | "~"] term { ( "+" | "-" ) term } .
 
-factor           = [ cast ]
+term                 = factor { ( "*" | "/" | "%" ) factor } .
+
+factor               = [ cast ]
                     ( [ "*" ] ( identifier | "(" expression ")" ) |
                       call |
                       literal |
                       string ) .
 
-while            = "while" "(" expression ")"
+while                = "while" "(" expression ")"
                              ( statement |
                                "{" { statement } "}" ) .
 
-if               = "if" "(" expression ")"
+if                   = "if" "(" expression ")"
                              ( statement |
                                "{" { statement } "}" )
                          [ "else"
                              ( statement |
                                "{" { statement } "}" ) ] .
 
-return           = "return" [ expression ] .
+return               = "return" [ expression ] .
 ```
