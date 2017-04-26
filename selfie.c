@@ -154,6 +154,9 @@ int CHAR_EXCLAMATION  = '!';
 int CHAR_PERCENTAGE   = '%';
 int CHAR_SINGLEQUOTE  = 39; // ASCII code 39 = '
 int CHAR_DOUBLEQUOTE  = '"';
+int CHAR_AND          = '&';
+int CHAR_OR           = '|';
+int CHAR_NOT          = '~';
 
 int SIZEOFINT     = 4; // must be the same as WORDSIZE
 int SIZEOFINTSTAR = 4; // must be the same as WORDSIZE
@@ -225,7 +228,7 @@ void initLibrary() {
 
   // compute INT_MAX and INT_MIN without integer overflows
   INT_MAX = (twoToThePowerOf(30) - 1) * 2 + 1;
-  INT_MIN = -INT_MAX - 1;
+  INT_MIN = ~INT_MAX;//-INT_MAX - 1;
 
   INT16_MAX = twoToThePowerOf(15) - 1;
   INT16_MIN = -INT16_MAX - 1;
@@ -318,6 +321,9 @@ int SYM_CHARACTER    = 26; // character
 int SYM_STRING       = 27; // string
 int SYM_LSHIFT       = 28; // <<
 int SYM_RSHIFT       = 29; // >>
+int SYM_AND          = 30; // &
+int SYM_OR           = 31; // |
+int SYM_NOT          = 32; // ~
 
 int* SYMBOLS; // strings representing symbols
 
@@ -354,7 +360,7 @@ int  sourceFD   = 0;        // file descriptor of open source file
 // ------------------------- INITIALIZATION ------------------------
 
 void initScanner () {
-  SYMBOLS = malloc(30 * SIZEOFINTSTAR);
+  SYMBOLS = malloc(33 * SIZEOFINTSTAR);
 
   *(SYMBOLS + SYM_IDENTIFIER)   = (int) "identifier";
   *(SYMBOLS + SYM_INTEGER)      = (int) "integer";
@@ -386,6 +392,9 @@ void initScanner () {
   *(SYMBOLS + SYM_STRING)       = (int) "string";
   *(SYMBOLS + SYM_LSHIFT)       = (int) "<<";
   *(SYMBOLS + SYM_RSHIFT)       = (int) ">>";
+  *(SYMBOLS + SYM_AND)          = (int) "&";
+  *(SYMBOLS + SYM_OR)           = (int) "|";
+  *(SYMBOLS + SYM_NOT)          = (int) "~";
 
   character = CHAR_EOF;
   symbol    = SYM_EOF;
@@ -502,6 +511,7 @@ int isStarOrDivOrModulo();
 int isPlusOrMinus();
 int isLshiftOrRshift();
 int isComparison();
+int isANDorOR();
 
 int lookForFactor();
 int lookForStatement();
@@ -529,6 +539,7 @@ int  gr_factor();
 int  gr_term();
 int  gr_simpleExpression();
 int  gr_shiftExpression();
+int  gr_comparisonExpression();
 int  gr_expression();
 void gr_while();
 void gr_if();
@@ -717,6 +728,8 @@ int OP_BNE     = 0x5;
 int OP_ADDIU   = 0x9;
 int OP_LW      = 0x23;
 int OP_SW      = 0x2B;
+int OP_ANDI    = 0xC;
+int OP_ORI     = 0xD;
 
 int* OPCODES; // strings representing MIPS opcodes
 
@@ -734,6 +747,9 @@ int FCT_SLL     = 0x0;
 int FCT_SRL     = 0x2;
 int FCT_SLLV    = 0x4;
 int FCT_SRLV    = 0x6;
+int FCT_AND     = 0x24;
+int FCT_OR      = 0x25;
+int FCT_NOT     = 0x26;
 
 int* FUNCTIONS; // strings representing MIPS functions
 
@@ -751,7 +767,7 @@ int shamt       = 0;
 // ------------------------- INITIALIZATION ------------------------
 
 void initDecoder() {
-  OPCODES = malloc(44 * SIZEOFINTSTAR);
+  OPCODES = malloc(46 * SIZEOFINTSTAR);
 
   *(OPCODES + OP_SPECIAL) = (int) "nop";
   *(OPCODES + OP_J)       = (int) "j";
@@ -761,8 +777,10 @@ void initDecoder() {
   *(OPCODES + OP_ADDIU)   = (int) "addiu";
   *(OPCODES + OP_LW)      = (int) "lw";
   *(OPCODES + OP_SW)      = (int) "sw";
+  *(OPCODES + OP_ANDI)    = (int) "andi";
+  *(OPCODES + OP_ORI)     = (int) "ori";
 
-  FUNCTIONS = malloc(47 * SIZEOFINTSTAR);
+  FUNCTIONS = malloc(50 * SIZEOFINTSTAR);
 
   *(FUNCTIONS + FCT_NOP)     = (int) "nop";
   *(FUNCTIONS + FCT_JR)      = (int) "jr";
@@ -778,6 +796,9 @@ void initDecoder() {
   *(FUNCTIONS + FCT_SRL)     = (int) "srl";
   *(FUNCTIONS + FCT_SLLV)    = (int) "sllv";
   *(FUNCTIONS + FCT_SRLV)    = (int) "srlv";
+  *(FUNCTIONS + FCT_AND)     = (int) "and";
+  *(FUNCTIONS + FCT_OR)      = (int) "or";
+  *(FUNCTIONS + FCT_NOT)     = (int) "not";
 }
 
 // -----------------------------------------------------------------
@@ -984,6 +1005,8 @@ void op_j();
 void op_beq();
 void op_bne();
 void op_addiu();
+void op_andi();
+void op_ori();
 void fct_jr();
 void fct_mfhi();
 void fct_mflo();
@@ -998,6 +1021,9 @@ void fct_sll();
 void fct_srl();
 void fct_sllv();
 void fct_srlv();
+void fct_and();
+void fct_or();
+void fct_not();
 
 // -----------------------------------------------------------------
 // -------------------------- INTERPRETER --------------------------
@@ -1339,29 +1365,84 @@ int rightShift(int n, int b) {
 int loadCharacter(int* s, int i) {
   // assert: i >= 0
   int a;
-
+  int b;
+  b = -1;//0b11111111111111111111111111111111;
   // a is the index of the word where the to-be-loaded i-th character in s is
   a = i / SIZEOFINT;
 
+  b = rightShift(b, (((SIZEOFINT - 1) - (i % SIZEOFINT)) * 8));
+
+  return rightShift((*(s + a)) & b , ((SIZEOFINT - 1) * 8) - (((SIZEOFINT - 1) - (i % SIZEOFINT)) * 8));
+
   // shift to-be-loaded character to the left resetting all bits to the left
   // then shift to-be-loaded character all the way to the right and return
-  return rightShift(((*(s + a)) << (((SIZEOFINT - 1) - (i % SIZEOFINT)) * 8)), (SIZEOFINT - 1) * 8);
+
+  // return rightShift(((*(s + a)) << (((SIZEOFINT - 1) - (i % SIZEOFINT)) * 8)), (SIZEOFINT - 1) * 8);
 }
+
+// 101001001010101010
+// 000001111111111111
+// 000001001010101010
+// 000000000000001001
+
 
 int* storeCharacter(int* s, int i, int c) {
   // assert: i >= 0, all characters are 7-bit
   int a;
-
+  int mask;
   // a is the index of the word where the with c
   // to-be-overwritten i-th character in s is
   a = i / SIZEOFINT;
 
+  mask = 255; //0b00000000000000000000000011111111
+
+  mask = mask << ((i % SIZEOFINT) * 8); //0b00000000000000001111111100000000
+
+  mask = -1 - mask; // 0b11111111111111110000000011111111
+
+  mask = *(s + a) & mask; // 0b10110111011011110000000011011011
+
+  c = c << ((i % SIZEOFINT) * 8); //0b00000000000000001011010100000000
+
+  *(s + a) = mask | c;  // 0b1011011101101111 10110101 11011011
+
   // subtract the to-be-overwritten character resetting its bits in s
   // then add c setting its bits at the i-th position in s
-  *(s + a) = (*(s + a) - (loadCharacter(s, i) << (i % SIZEOFINT) * 8)) + (c << ((i % SIZEOFINT) * 8));
+  // *(s + a) = (*(s + a) - (loadCharacter(s, i) << (i % SIZEOFINT) * 8)) + (c << ((i % SIZEOFINT) * 8));
+  // *(s + a) = (*(s + a) - (loadCharacter(s, i) << (i % SIZEOFINT) * 8)) | (c << (i % SIZEOFINT) * 8);
 
   return s;
 }
+
+
+// int mask;
+//
+// mask = 255 << ((i % SIZEOFINT) * 8); //0b00000000000000000000000011111111
+//
+// mask = -1 - mask;
+//
+// mask = *(s + a) & mask;
+//
+// c = c << ((i % SIZEOFINT) * 8);
+//
+// *(s + a) = mask | c;
+
+// 0b11111111111111111111111111111111
+// -
+// 0b00111111110000000000000000000000
+// =
+// 0b11000000001111111111111111111111
+//
+//
+// 0b00110101110000000000000000000000
+//
+// 0b11000000001111111111111111111111
+// &
+// 0b11111000111111111111111111111111
+//
+// 0b11000000001111111111111111111111
+// |
+// 0b00110101110000000000000000000000
 
 int stringLength(int* s) {
   int i;
@@ -2283,6 +2364,21 @@ void getSymbol() {
 
         symbol = SYM_MOD;
 
+      }else if (character == CHAR_AND) {
+        getCharacter();
+
+        symbol = SYM_AND;
+
+      } else if(character == CHAR_OR){
+        getCharacter();
+
+        symbol = SYM_OR;
+
+      }else if (character == CHAR_NOT) {
+        getCharacter();
+
+        symbol = SYM_NOT;
+
       } else {
         printLineNumber((int*) "error", lineNumber);
         print((int*) "found unknown character ");
@@ -2513,6 +2609,16 @@ int isComparison() {
   else
     return 0;
 }
+
+int isANDorOR(){
+  if (symbol == SYM_AND)
+    return 1;
+  if (symbol == SYM_OR)
+    return 1;
+  else
+    return 0;
+}
+
 
 int lookForFactor() {
   if (symbol == SYM_LPARENTHESIS)
@@ -3111,6 +3217,7 @@ int gr_term() {
 
 int gr_simpleExpression() {
   int sign;
+  int not;
   int ltype;
   int operatorSymbol;
   int rtype;
@@ -3120,6 +3227,7 @@ int gr_simpleExpression() {
   // optional: -
   if (symbol == SYM_MINUS) {
     sign = 1;
+    not = 0;
 
     mayBeINTMIN = 1;
     isINTMIN    = 0;
@@ -3135,9 +3243,14 @@ int gr_simpleExpression() {
       // even though 0-INT_MIN == INT_MIN
       sign = 0;
     }
-  } else
+  }else if (symbol == SYM_NOT) {
     sign = 0;
-
+    not = 1;
+    getSymbol();
+  } else{
+    sign = 0;
+    not = 0;
+  }
   ltype = gr_term();
 
   // assert: allocatedTemporaries == n + 1
@@ -3150,6 +3263,14 @@ int gr_simpleExpression() {
     }
 
     emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), 0, FCT_SUBU);
+  }else if(not){
+    if (ltype != INT_T) {
+      typeWarning(INT_T, ltype);
+
+      ltype = INT_T;
+    }
+
+    emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(),  currentTemporary(), 0, FCT_NOT);
   }
 
   // + or -?
@@ -3217,7 +3338,8 @@ int gr_shiftExpression() {
   return ltype;
 }
 
-int gr_expression() {
+
+int  gr_comparisonExpression(){
   int ltype;
   int operatorSymbol;
   int rtype;
@@ -3300,6 +3422,36 @@ int gr_expression() {
   }
 
   // assert: allocatedTemporaries == n + 1
+
+  return ltype;
+}
+
+int gr_expression() {
+  int ltype;
+  int operatorSymbol;
+  int rtype;
+
+  ltype = gr_comparisonExpression();
+
+  if(isANDorOR()){
+    operatorSymbol = symbol;
+
+    getSymbol();
+
+    rtype = gr_comparisonExpression();
+
+    if(operatorSymbol == SYM_AND) {
+
+      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_AND);
+
+
+    }else if(operatorSymbol == SYM_OR) {
+
+      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_OR);
+
+    }
+    tfree(1);
+  }
 
   return ltype;
 }
@@ -5863,6 +6015,86 @@ void op_addiu() {
   }
 }
 
+void op_andi() {
+  if (debug) {
+    printOpcode(opcode);
+    print((int*) " ");
+    printRegister(rt);
+    print((int*) ",");
+    printRegister(rs);
+    print((int*) ",");
+    printInteger(signExtend(immediate));
+    if (interpret) {
+      print((int*) ": ");
+      printRegister(rt);
+      print((int*) "=");
+      printInteger(*(registers+rt));
+      print((int*) ",");
+      printRegister(rs);
+      print((int*) "=");
+      printInteger(*(registers+rs));
+    }
+  }
+
+  if (interpret) {
+    *(registers+rt) = *(registers+rs) & signExtend(immediate);
+
+    // TODO: check for overflow
+
+    pc = pc + WORDSIZE;
+  }
+
+  if (debug) {
+    if (interpret) {
+      print((int*) " -> ");
+      printRegister(rt);
+      print((int*) "=");
+      printInteger(*(registers+rt));
+    }
+    println();
+  }
+}
+
+void op_ori() {
+  if (debug) {
+    printOpcode(opcode);
+    print((int*) " ");
+    printRegister(rt);
+    print((int*) ",");
+    printRegister(rs);
+    print((int*) ",");
+    printInteger(signExtend(immediate));
+    if (interpret) {
+      print((int*) ": ");
+      printRegister(rt);
+      print((int*) "=");
+      printInteger(*(registers+rt));
+      print((int*) ",");
+      printRegister(rs);
+      print((int*) "=");
+      printInteger(*(registers+rs));
+    }
+  }
+
+  if (interpret) {
+    *(registers+rt) = *(registers+rs) | signExtend(immediate);
+
+    // TODO: check for overflow
+
+    pc = pc + WORDSIZE;
+  }
+
+  if (debug) {
+    if (interpret) {
+      print((int*) " -> ");
+      printRegister(rt);
+      print((int*) "=");
+      printInteger(*(registers+rt));
+    }
+    println();
+  }
+}
+
 void fct_jr() {
   if (debug) {
     printFunction(function);
@@ -6427,6 +6659,49 @@ void fct_srlv() {
 
     pc = pc + WORDSIZE;
   }
+  if (debug) {
+    if (interpret) {
+      print((int*) " -> ");
+      printRegister(rd);
+      print((int*) "=");
+      printInteger(*(registers+rd));
+    }
+    println();
+  }
+}
+
+void fct_and() {
+  if (debug) {
+    printFunction(function);
+    print((int*) " ");
+    printRegister(rd);
+    print((int*) ",");
+    printRegister(rs);
+    print((int*) ",");
+    printRegister(rt);
+    if (interpret) {
+      print((int*) ": ");
+      printRegister(rd);
+      print((int*) "=");
+      printInteger(*(registers+rd));
+      print((int*) ",");
+      printRegister(rs);
+      print((int*) "=");
+      printInteger(*(registers+rs));
+      print((int*) ",");
+      printRegister(rt);
+      print((int*) "=");
+      printInteger(*(registers+rt));
+    }
+  }
+
+  if (interpret) {
+    *(registers+rd) = (*(registers+rs) & *(registers+rt));
+
+
+
+    pc = pc + WORDSIZE;
+  }
 
   if (debug) {
     if (interpret) {
@@ -6438,6 +6713,91 @@ void fct_srlv() {
     println();
   }
 }
+
+void fct_or() {
+  if (debug) {
+    printFunction(function);
+    print((int*) " ");
+    printRegister(rd);
+    print((int*) ",");
+    printRegister(rs);
+    print((int*) ",");
+    printRegister(rt);
+    if (interpret) {
+      print((int*) ": ");
+      printRegister(rd);
+      print((int*) "=");
+      printInteger(*(registers+rd));
+      print((int*) ",");
+      printRegister(rs);
+      print((int*) "=");
+      printInteger(*(registers+rs));
+      print((int*) ",");
+      printRegister(rt);
+      print((int*) "=");
+      printInteger(*(registers+rt));
+    }
+  }
+
+  if (interpret) {
+    *(registers+rd) = (*(registers+rs) | *(registers+rt));
+
+    pc = pc + WORDSIZE;
+  }
+
+  if (debug) {
+    if (interpret) {
+      print((int*) " -> ");
+      printRegister(rd);
+      print((int*) "=");
+      printInteger(*(registers+rd));
+    }
+    println();
+  }
+}
+
+void fct_not() {
+  if (debug) {
+    printFunction(function);
+    print((int*) " ");
+    printRegister(rd);
+    print((int*) ",");
+    printRegister(rs);
+    print((int*) ",");
+    printRegister(rt);
+    if (interpret) {
+      print((int*) ": ");
+      printRegister(rd);
+      print((int*) "=");
+      printInteger(*(registers+rd));
+      print((int*) ",");
+      printRegister(rs);
+      print((int*) "=");
+      printInteger(*(registers+rs));
+      print((int*) ",");
+      printRegister(rt);
+      print((int*) "=");
+      printInteger(*(registers+rt));
+    }
+  }
+
+  if (interpret) {
+    *(registers+rd) = ~((*(registers+rs) | *(registers+rt)));
+
+    pc = pc + WORDSIZE;
+  }
+
+  if (debug) {
+    if (interpret) {
+      print((int*) " -> ");
+      printRegister(rd);
+      print((int*) "=");
+      printInteger(*(registers+rd));
+    }
+    println();
+  }
+}
+
 
 // -----------------------------------------------------------------
 // -------------------------- INTERPRETER --------------------------
@@ -6553,6 +6913,12 @@ void execute() {
       fct_sllv();
     else if (function == FCT_SRLV)
       fct_srlv();
+    else if (function == FCT_AND)
+      fct_and();
+    else if (function == FCT_OR)
+      fct_or();
+    else if (function == FCT_NOT)
+     fct_not();
     else
       throwException(EXCEPTION_UNKNOWNINSTRUCTION, 0);
   } else if (opcode == OP_ADDIU)
@@ -6569,6 +6935,10 @@ void execute() {
     op_jal();
   else if (opcode == OP_J)
     op_j();
+  else if (opcode == OP_ANDI)
+    op_andi();
+  else if (opcode == OP_ORI)
+    op_ori();
   else
     throwException(EXCEPTION_UNKNOWNINSTRUCTION, 0);
 }
