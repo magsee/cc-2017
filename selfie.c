@@ -563,6 +563,9 @@ int returnType = 0; // return type of currently parsed procedure
 
 int mainJump = 0; // address where JAL instruction to main procedure is
 
+int isConstant = 0;
+int constantVal = 0;
+
 int numberOfCalls       = 0;
 int numberOfAssignments = 0;
 int numberOfWhile       = 0;
@@ -584,6 +587,7 @@ void resetParser() {
 // -----------------------------------------------------------------
 
 void emitLeftShiftBy(int b);
+void emitTerm(int op, int mf, int reverse);
 void emitMainEntry();
 void bootstrapCode();
 
@@ -2403,6 +2407,8 @@ int maxIntegerLength(int base) {
     return 11;
   else if (base == 16)
     return 8;
+  else
+    return 0;
 }
 
 // -----------------------------------------------------------------
@@ -3025,6 +3031,9 @@ int gr_factor() {
 
   // assert: n = allocatedTemporaries
 
+  isConstant = 0;
+  constantVal = 0;
+
   hasCast = 0;
 
   type = INT_T;
@@ -3125,7 +3134,10 @@ int gr_factor() {
 
   // integer?
   } else if (symbol == SYM_INTEGER) {
-    load_integer(literal);
+    //load_integer(literal);
+
+    isConstant = 1;
+    constantVal = literal;
 
     getSymbol();
 
@@ -3174,6 +3186,12 @@ int gr_term() {
   int ltype;
   int operatorSymbol;
   int rtype;
+  int op;
+  int mf;
+  int isLConstant;
+  int lConstant;
+  int isRConstant;
+  int rConstant;
 
   // assert: n = allocatedTemporaries
 
@@ -3181,13 +3199,30 @@ int gr_term() {
 
   // assert: allocatedTemporaries == n + 1
 
+  if (isStarOrDivOrModulo() == 0) {
+    if (isConstant) {
+      load_integer(constantVal);
+      isConstant = 0;
+    }
+  }
+
   // * / or % ?
   while (isStarOrDivOrModulo()) {
     operatorSymbol = symbol;
 
     getSymbol();
 
+    if(isConstant) {
+      load_integer(constantVal);
+      isConstant = 0;
+    }
+
     rtype = gr_factor();
+
+    if(isConstant) {
+      load_integer(constantVal);
+      isConstant = 0;
+    }
 
     // assert: allocatedTemporaries == n + 2
 
@@ -3195,17 +3230,19 @@ int gr_term() {
       typeWarning(ltype, rtype);
 
     if (operatorSymbol == SYM_ASTERISK) {
-      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, 0, FCT_MULTU);
-      emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), 0, FCT_MFLO);
+      op = FCT_MULTU;
+      mf = FCT_MFLO;
 
     } else if (operatorSymbol == SYM_DIV) {
-      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, 0, FCT_DIVU);
-      emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), 0, FCT_MFLO);
+      op = FCT_DIVU;
+      mf = FCT_MFLO;
 
     } else if (operatorSymbol == SYM_MOD) {
-      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, 0, FCT_DIVU);
-      emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), 0, FCT_MFHI);
+      op = FCT_DIVU;
+      mf = FCT_MFHI;
     }
+
+    emitTerm(op, mf, 0);
 
     tfree(1);
   }
@@ -3321,6 +3358,9 @@ int gr_shiftExpression() {
     getSymbol();
 
     rtype = gr_simpleExpression();
+
+    if (ltype != rtype)
+      typeWarning(ltype, rtype);
 
     if (operatorSymbol == SYM_LSHIFT) {
 
@@ -3439,6 +3479,9 @@ int gr_expression() {
     getSymbol();
 
     rtype = gr_comparisonExpression();
+
+    if (ltype != rtype)
+      typeWarning(ltype, rtype);
 
     if(operatorSymbol == SYM_AND) {
 
@@ -4165,6 +4208,17 @@ void emitLeftShiftBy(int b) {
   // assert: 0 <= b < 15
 
   emitRFormat(OP_SPECIAL, 0, currentTemporary(), currentTemporary(), b, FCT_SLL);
+}
+
+void emitTerm(int op, int mf, int inverse) {
+
+  if (inverse == 0) {
+    emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, 0, op);
+    emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), 0, mf);
+  } else {
+    emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), 0, 0, op);
+    emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), 0, mf);
+  }
 }
 
 void emitMainEntry() {
