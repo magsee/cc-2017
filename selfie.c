@@ -3031,9 +3031,6 @@ int gr_factor() {
 
   // assert: n = allocatedTemporaries
 
-  isConstant = 0;
-  constantVal = 0;
-
   hasCast = 0;
 
   type = INT_T;
@@ -3128,9 +3125,11 @@ int gr_factor() {
       // reset return register to initial return value
       // for missing return expressions
       emitIFormat(OP_ADDIU, REG_ZR, REG_V0, 0);
-    } else
+    } else {
       // variable access: identifier
       type = load_variable(variableOrProcedureName);
+      isConstant = 0;
+    }
 
   // integer?
   } else if (symbol == SYM_INTEGER) {
@@ -3193,18 +3192,14 @@ int gr_term() {
   int isRConstant;
   int rConstant;
 
+  isLConstant = 0;
+  isRConstant = 0;
+
   // assert: n = allocatedTemporaries
 
   ltype = gr_factor();
 
   // assert: allocatedTemporaries == n + 1
-
-  if (isStarOrDivOrModulo() == 0) {
-    if (isConstant) {
-      load_integer(constantVal);
-      isConstant = 0;
-    }
-  }
 
   // * / or % ?
   while (isStarOrDivOrModulo()) {
@@ -3213,16 +3208,18 @@ int gr_term() {
     getSymbol();
 
     if(isConstant) {
-      load_integer(constantVal);
-      isConstant = 0;
-    }
+      isLConstant = 1;
+      lConstant = constantVal;
+    } else
+      isLConstant = 0;
 
     rtype = gr_factor();
 
     if(isConstant) {
-      load_integer(constantVal);
-      isConstant = 0;
-    }
+      isRConstant = 1;
+      rConstant = constantVal;
+    } else
+      isRConstant = 0;
 
     // assert: allocatedTemporaries == n + 2
 
@@ -3242,9 +3239,32 @@ int gr_term() {
       mf = FCT_MFHI;
     }
 
-    emitTerm(op, mf, 0);
-
-    tfree(1);
+    if (isLConstant) {
+      if (isRConstant) {
+        if (operatorSymbol == SYM_ASTERISK)
+          constantVal = lConstant * rConstant;
+        else if (operatorSymbol == SYM_DIV)
+          constantVal = lConstant / rConstant;
+        else if (operatorSymbol == SYM_MOD)
+          constantVal = lConstant % rConstant;
+        isLConstant = 0;
+        isRConstant = 0;
+        isConstant = 1;
+      } else {
+        load_integer(lConstant);
+        emitTerm(op, mf, 1);
+        isConstant = 0;
+      }
+    } else {
+      if (isRConstant) {
+        load_integer(rConstant);
+        emitTerm(op, mf, 0);
+        isConstant = 0;
+      } else {
+        emitTerm(op, mf, 0);
+        isConstant = 0;
+      }
+    }
   }
 
   // assert: allocatedTemporaries == n + 1
@@ -3290,6 +3310,11 @@ int gr_simpleExpression() {
   }
   ltype = gr_term();
 
+  if (isConstant) {
+    load_integer(constantVal);
+    isConstant = 0;
+  }
+
   // assert: allocatedTemporaries == n + 1
 
   if (sign) {
@@ -3318,6 +3343,11 @@ int gr_simpleExpression() {
 
     rtype = gr_term();
 
+    if (isConstant) {
+      load_integer(constantVal);
+      isConstant = 0;
+    }
+    
     // assert: allocatedTemporaries == n + 2
 
     if (operatorSymbol == SYM_PLUS) {
@@ -4219,6 +4249,7 @@ void emitTerm(int op, int mf, int inverse) {
     emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), 0, 0, op);
     emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), 0, mf);
   }
+  tfree(1);
 }
 
 void emitMainEntry() {
