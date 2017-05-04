@@ -565,6 +565,8 @@ int mainJump = 0; // address where JAL instruction to main procedure is
 
 int isConstant = 0;
 int constantVal = 0;
+int sign = 0;
+int not = 0;
 
 int numberOfCalls       = 0;
 int numberOfAssignments = 0;
@@ -2862,6 +2864,13 @@ void load_integer(int value) {
     emitLeftShiftBy(14);
     emitLeftShiftBy(3);
   }
+  if (sign) {
+    sign = 0;
+    emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), 0, FCT_SUBU);
+  } else if (not) {
+    sign = 0;
+    emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(),  currentTemporary(), 0, FCT_NOT);
+  }
 }
 
 void load_string(int* string) {
@@ -3273,11 +3282,16 @@ int gr_term() {
 }
 
 int gr_simpleExpression() {
-  int sign;
-  int not;
   int ltype;
   int operatorSymbol;
   int rtype;
+  int isLConstant;
+  int lConstant;
+  int isRConstant;
+  int rConstant;
+
+  isLConstant = 0;
+  isRConstant = 0;
 
   // assert: n = allocatedTemporaries
 
@@ -3300,40 +3314,27 @@ int gr_simpleExpression() {
       // even though 0-INT_MIN == INT_MIN
       sign = 0;
     }
-  }else if (symbol == SYM_NOT) {
+  } else if (symbol == SYM_NOT) {
     sign = 0;
     not = 1;
     getSymbol();
-  } else{
+  } else {
     sign = 0;
     not = 0;
   }
+
   ltype = gr_term();
 
   if (isConstant) {
-    load_integer(constantVal);
-    isConstant = 0;
+    if(sign) {
+      sign = 0;
+      printInteger(constantVal);
+      println();
+      constantVal = 0 - constantVal;
+    }
   }
 
   // assert: allocatedTemporaries == n + 1
-
-  if (sign) {
-    if (ltype != INT_T) {
-      typeWarning(INT_T, ltype);
-
-      ltype = INT_T;
-    }
-
-    emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), 0, FCT_SUBU);
-  }else if(not){
-    if (ltype != INT_T) {
-      typeWarning(INT_T, ltype);
-
-      ltype = INT_T;
-    }
-
-    emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(),  currentTemporary(), 0, FCT_NOT);
-  }
 
   // + or -?
   while (isPlusOrMinus()) {
@@ -3341,13 +3342,20 @@ int gr_simpleExpression() {
 
     getSymbol();
 
+    if(isConstant) {
+      isLConstant = 1;
+      lConstant = constantVal;
+    } else
+      isLConstant = 0;
+
     rtype = gr_term();
 
-    if (isConstant) {
-      load_integer(constantVal);
-      isConstant = 0;
-    }
-    
+    if(isConstant) {
+      isRConstant = 1;
+      rConstant = constantVal;
+    } else
+      isRConstant = 0;
+
     // assert: allocatedTemporaries == n + 2
 
     if (operatorSymbol == SYM_PLUS) {
@@ -3358,16 +3366,60 @@ int gr_simpleExpression() {
       } else if (rtype == INTSTAR_T)
         typeWarning(ltype, rtype);
 
-      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_ADDU);
-
+      if (isLConstant) {
+        if (isRConstant) {
+          constantVal = lConstant + rConstant;
+          isLConstant = 0;
+          isRConstant = 0;
+          isConstant = 1;
+        } else {
+          load_integer(lConstant);
+          emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), 0, FCT_ADDU);
+          tfree(1);
+          isConstant = 0;
+        }
+      } else {
+        if (isRConstant) {
+          load_integer(rConstant);
+          emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_ADDU);
+          tfree(1);
+          isConstant = 0;
+        } else {
+          emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_ADDU);
+          tfree(1);
+          isConstant = 0;
+        }
+      }
     } else if (operatorSymbol == SYM_MINUS) {
       if (ltype != rtype)
         typeWarning(ltype, rtype);
 
-      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_SUBU);
+      if (isLConstant) {
+        if (isRConstant) {
+          constantVal = lConstant - rConstant;
+          isLConstant = 0;
+          isRConstant = 0;
+          isConstant = 1;
+        } else {
+          load_integer(lConstant);
+          emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), 0, FCT_SUBU);
+          tfree(1);
+          isConstant = 0;
+        }
+      } else {
+        if (isRConstant) {
+          load_integer(rConstant);
+          emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_SUBU);
+          tfree(1);
+          isConstant = 0;
+        } else {
+          emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_SUBU);
+          tfree(1);
+          isConstant = 0;
+        }
+      }
     }
 
-    tfree(1);
   }
 
   // assert: allocatedTemporaries == n + 1
@@ -3387,7 +3439,17 @@ int gr_shiftExpression() {
 
     getSymbol();
 
+    if (isConstant) {
+      load_integer(constantVal);
+      isConstant = 0;
+    }
+
     rtype = gr_simpleExpression();
+
+    if (isConstant) {
+      load_integer(constantVal);
+      isConstant = 0;
+    }
 
     if (ltype != rtype)
       typeWarning(ltype, rtype);
@@ -3426,7 +3488,17 @@ int  gr_comparisonExpression(){
 
     getSymbol();
 
+    if (isConstant) {
+      load_integer(constantVal);
+      isConstant = 0;
+    }
+
     rtype = gr_shiftExpression();
+
+    if (isConstant) {
+      load_integer(constantVal);
+      isConstant = 0;
+    }
 
     // assert: allocatedTemporaries == n + 2
 
@@ -3503,12 +3575,29 @@ int gr_expression() {
 
   ltype = gr_comparisonExpression();
 
+  if(isANDorOR() == 0) {
+    if(isConstant) {
+      load_integer(constantVal);
+      isConstant = 0;
+    }
+  }
+
   if(isANDorOR()){
     operatorSymbol = symbol;
 
     getSymbol();
 
+    if (isConstant) {
+      load_integer(constantVal);
+      isConstant = 0;
+    }
+
     rtype = gr_comparisonExpression();
+
+    if (isConstant) {
+      load_integer(constantVal);
+      isConstant = 0;
+    }
 
     if (ltype != rtype)
       typeWarning(ltype, rtype);
