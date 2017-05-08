@@ -125,6 +125,8 @@ void printHexadecimal(int n, int a);
 void printOctal(int n, int a);
 void printBinary(int n, int a);
 
+void printList(int* list);
+
 int roundUp(int n, int m);
 
 int* zalloc(int size);
@@ -426,7 +428,7 @@ void resetScanner() {
 
 void resetSymbolTables();
 
-void createSymbolTableEntry(int which, int* string, int line, int class, int type, int value, int address, int size);
+void createSymbolTableEntry(int which, int* string, int line, int class, int type, int value, int address, int size, int* dimensions);
 
 int* searchSymbolTable(int* entry, int* string, int class);
 int* getScopedSymbolTableEntry(int* string, int class);
@@ -444,28 +446,42 @@ int reportUndefinedProcedures();
 // |  5 | value   | VARIABLE: initial value
 // |  6 | address | VARIABLE: offset, PROCEDURE: address, STRING: offset
 // |  7 | scope   | REG_GP, REG_FP
+// |  8 | size    | total size of an array in words
+// |  9 | dim     | dimensions table for size of each dimension
 // +----+---------+
 
-int* getNextEntry(int* entry)  { return (int*) *entry; }
-int* getString(int* entry)     { return (int*) *(entry + 1); }
-int  getLineNumber(int* entry) { return        *(entry + 2); }
-int  getClass(int* entry)      { return        *(entry + 3); }
-int  getType(int* entry)       { return        *(entry + 4); }
-int  getValue(int* entry)      { return        *(entry + 5); }
-int  getAddress(int* entry)    { return        *(entry + 6); }
-int  getScope(int* entry)      { return        *(entry + 7); }
-int  getSize(int* entry)       { return        *(entry + 8); }
+int* getNextEntry(int* entry)     { return (int*) *entry; }
+int* getString(int* entry)        { return (int*) *(entry + 1); }
+int  getLineNumber(int* entry)    { return        *(entry + 2); }
+int  getClass(int* entry)         { return        *(entry + 3); }
+int  getType(int* entry)          { return        *(entry + 4); }
+int  getValue(int* entry)         { return        *(entry + 5); }
+int  getAddress(int* entry)       { return        *(entry + 6); }
+int  getScope(int* entry)         { return        *(entry + 7); }
+int  getSize(int* entry)          { return        *(entry + 8); }
+int  getdimensions(int* entry)   { return        *(entry + 9); }
+
+void setNextEntry(int* entry, int* next)          { *entry       = (int) next; }
+void setString(int* entry, int* identifier)       { *(entry + 1) = (int) identifier; }
+void setLineNumber(int* entry, int line)          { *(entry + 2) = line; }
+void setClass(int* entry, int class)              { *(entry + 3) = class; }
+void setType(int* entry, int type)                { *(entry + 4) = type; }
+void setValue(int* entry, int value)              { *(entry + 5) = value; }
+void setAddress(int* entry, int address)          { *(entry + 6) = address; }
+void setScope(int* entry, int scope)              { *(entry + 7) = scope; }
+void setSize(int* entry, int size)                { *(entry + 8) = size; }
+void setdimensions(int* entry, int dimensions)  { *(entry + 9) = dimensions; }
 
 
-void setNextEntry(int* entry, int* next)    { *entry       = (int) next; }
-void setString(int* entry, int* identifier) { *(entry + 1) = (int) identifier; }
-void setLineNumber(int* entry, int line)    { *(entry + 2) = line; }
-void setClass(int* entry, int class)        { *(entry + 3) = class; }
-void setType(int* entry, int type)          { *(entry + 4) = type; }
-void setValue(int* entry, int value)        { *(entry + 5) = value; }
-void setAddress(int* entry, int address)    { *(entry + 6) = address; }
-void setScope(int* entry, int scope)        { *(entry + 7) = scope; }
-void setSize(int* entry, int size)          { *(entry + 8) = size; }
+// dimension size table entry:
+// +----+---------+
+// |  0 | next    | pointer to next entry
+// |  1 | size    | size of the dimension
+// +----+---------+
+
+int getDimSize(int* entry)  { return (int*) *(entry + 1); }
+
+void setDimSize(int* entry, int dimSize)  { *(entry + 1) = (int) dimSize; }
 
 // ------------------------ GLOBAL CONSTANTS -----------------------
 
@@ -1850,6 +1866,14 @@ void printBinary(int n, int a) {
   print(itoa(n, integer_buffer, 2, a, 0));
 }
 
+void printList(int* list) {
+  while(list != (int*) 0) {
+    printInteger(getDimSize(list));
+    println();
+    list = getNextEntry(list);
+  }
+}
+
 int roundUp(int n, int m) {
   if (n % m == 0)
     return n;
@@ -2429,10 +2453,10 @@ int maxIntegerLength(int base) {
 // ------------------------- SYMBOL TABLE --------------------------
 // -----------------------------------------------------------------
 
-void createSymbolTableEntry(int whichTable, int* string, int line, int class, int type, int value, int address, int size) {
+void createSymbolTableEntry(int whichTable, int* string, int line, int class, int type, int value, int address, int size, int* dimensions) {
   int* newEntry;
 
-  newEntry = malloc(2 * SIZEOFINTSTAR + 7 * SIZEOFINT);
+  newEntry = malloc(3 * SIZEOFINTSTAR + 7 * SIZEOFINT);
 
   setString(newEntry, string);
   setLineNumber(newEntry, line);
@@ -2441,6 +2465,7 @@ void createSymbolTableEntry(int whichTable, int* string, int line, int class, in
   setValue(newEntry, value);
   setAddress(newEntry, address);
   setSize(newEntry, size);
+  setdimensions(newEntry, dimensions);
 
   // create entry at head of symbol table
   if (whichTable == GLOBAL_TABLE) {
@@ -2542,6 +2567,30 @@ int reportUndefinedProcedures() {
   }
 
   return undefined;
+}
+
+int* createDimTableEntry(int* table, int size) {
+  int* newEntry;
+  int* temp;
+
+  newEntry = malloc(SIZEOFINTSTAR + SIZEOFINT);
+
+  setNextEntry(newEntry, (int*) 0);
+  setDimSize(newEntry, size);
+
+  if (table == (int*) 0) {
+    table = newEntry;
+    return table;
+  }
+
+  temp = table;
+
+  while (getNextEntry(temp) != (int*) 0) {
+    temp = getNextEntry(temp);
+  }
+  setNextEntry(temp, newEntry);
+
+  return table;
 }
 
 // -----------------------------------------------------------------
@@ -2886,7 +2935,7 @@ void load_string(int* string) {
 
   allocatedMemory = allocatedMemory + roundUp(length, WORDSIZE);
 
-  createSymbolTableEntry(GLOBAL_TABLE, string, lineNumber, STRING, INTSTAR_T, 0, -allocatedMemory, 1);
+  createSymbolTableEntry(GLOBAL_TABLE, string, lineNumber, STRING, INTSTAR_T, 0, -allocatedMemory, 1, 0);
 
   talloc();
 
@@ -2902,7 +2951,7 @@ int help_call_codegen(int* entry, int* procedure) {
     // default return type is "int"
     type = INT_T;
 
-    createSymbolTableEntry(GLOBAL_TABLE, procedure, lineNumber, PROCEDURE, type, 0, binaryLength, 1);
+    createSymbolTableEntry(GLOBAL_TABLE, procedure, lineNumber, PROCEDURE, type, 0, binaryLength, 1, 0);
 
     emitJFormat(OP_JAL, 0);
 
@@ -3677,6 +3726,10 @@ void gr_statement() {
   int rtype;
   int* variableOrProcedureName;
   int* entry;
+  int isArraay;
+  int index;
+
+  index = 1;
 
   // assert: allocatedTemporaries == 0;
 
@@ -3774,6 +3827,13 @@ void gr_statement() {
 
     getSymbol();
 
+    if (symbol == SYM_LBRACKET) {
+      while (symbol == SYM_LBRACKET) {
+        gr_selector();
+
+      }
+    }
+
     // procedure call
     if (symbol == SYM_LPARENTHESIS) {
       getSymbol();
@@ -3860,13 +3920,13 @@ void gr_variable(int offset) {
 
   if (symbol == SYM_IDENTIFIER) {
     // TODO: check if identifier has already been declared
-    createSymbolTableEntry(LOCAL_TABLE, identifier, lineNumber, VARIABLE, type, 0, offset, 1);
+    createSymbolTableEntry(LOCAL_TABLE, identifier, lineNumber, VARIABLE, type, 0, offset, 1, 0);
 
     getSymbol();
   } else {
     syntaxErrorSymbol(SYM_IDENTIFIER);
 
-    createSymbolTableEntry(LOCAL_TABLE, (int*) "missing variable name", lineNumber, VARIABLE, type, 0, offset, 1);
+    createSymbolTableEntry(LOCAL_TABLE, (int*) "missing variable name", lineNumber, VARIABLE, type, 0, offset, 1, 0);
   }
 }
 
@@ -4001,7 +4061,7 @@ void gr_procedure(int* procedure, int type) {
     // this is a procedure declaration
     if (entry == (int*) 0)
       // procedure never called nor declared nor defined
-      createSymbolTableEntry(GLOBAL_TABLE, procedure, lineNumber, PROCEDURE, type, 0, 0, 1);
+      createSymbolTableEntry(GLOBAL_TABLE, procedure, lineNumber, PROCEDURE, type, 0, 0, 1, 0);
     else if (getType(entry) != type)
       // procedure already called, declared, or even defined
       // check return type but otherwise ignore
@@ -4013,7 +4073,7 @@ void gr_procedure(int* procedure, int type) {
     // this is a procedure definition
     if (entry == (int*) 0)
       // procedure never called nor declared nor defined
-      createSymbolTableEntry(GLOBAL_TABLE, procedure, lineNumber, PROCEDURE, type, 0, binaryLength,1 );
+      createSymbolTableEntry(GLOBAL_TABLE, procedure, lineNumber, PROCEDURE, type, 0, binaryLength, 1, 0);
     else {
       // procedure already called or declared or defined
       if (getAddress(entry) != 0) {
@@ -4105,8 +4165,12 @@ void gr_cstar() {
   int initialValue;
   int* entry;
   int size;
+  int* dimensions;
+  int dimSize;
 
   size = 1;
+  dimensions = (int*) 0;
+  dimSize = 0;
 
   while (symbol != SYM_EOF) {
     while (lookForType()) {
@@ -4152,9 +4216,10 @@ void gr_cstar() {
 
           if (symbol == SYM_LBRACKET) {
               while (symbol == SYM_LBRACKET) {
-              size = size * gr_selector();
-              printInteger(size);
-              println();
+                dimSize = gr_selector();
+                size = size * dimSize;
+                dimensions = createDimTableEntry(dimensions, dimSize);
+                tfree(1);
             }
           }
 
@@ -4172,9 +4237,9 @@ void gr_cstar() {
           entry = searchSymbolTable(global_symbol_table, variableOrProcedureName, VARIABLE);
 
           if (entry == (int*) 0) {
-            allocatedMemory = allocatedMemory + WORDSIZE;
+            allocatedMemory = allocatedMemory + size * WORDSIZE;
 
-            createSymbolTableEntry(GLOBAL_TABLE, variableOrProcedureName, currentLineNumber, VARIABLE, type, initialValue, -allocatedMemory, size);
+            createSymbolTableEntry(GLOBAL_TABLE, variableOrProcedureName, currentLineNumber, VARIABLE, type, initialValue, -allocatedMemory, size, dimensions);
           } else {
             // global variable already declared or defined
             printLineNumber((int*) "warning", currentLineNumber);
@@ -4240,7 +4305,7 @@ void emitMainEntry() {
 
   mainJump = binaryLength;
 
-  createSymbolTableEntry(GLOBAL_TABLE, (int*) "main", 0, PROCEDURE, INT_T, 0, mainJump, 1);
+  createSymbolTableEntry(GLOBAL_TABLE, (int*) "main", 0, PROCEDURE, INT_T, 0, mainJump, 1, 0);
 
   // jump and link to main, will return here only if there is no exit call
   emitJFormat(OP_JAL, 0);
@@ -4938,7 +5003,7 @@ void selfie_load() {
 // -----------------------------------------------------------------
 
 void emitExit() {
-  createSymbolTableEntry(LIBRARY_TABLE, (int*) "exit", 0, PROCEDURE, VOID_T, 0, binaryLength, 1);
+  createSymbolTableEntry(LIBRARY_TABLE, (int*) "exit", 0, PROCEDURE, VOID_T, 0, binaryLength, 1, 0);
 
   // load argument for exit
   emitIFormat(OP_LW, REG_SP, REG_A0, 0); // exit code
@@ -4976,7 +5041,7 @@ void implementExit() {
 }
 
 void emitRead() {
-  createSymbolTableEntry(LIBRARY_TABLE, (int*) "read", 0, PROCEDURE, INT_T, 0, binaryLength, 1);
+  createSymbolTableEntry(LIBRARY_TABLE, (int*) "read", 0, PROCEDURE, INT_T, 0, binaryLength, 1, 0);
 
   emitIFormat(OP_LW, REG_SP, REG_A2, 0); // size
   emitIFormat(OP_ADDIU, REG_SP, REG_SP, WORDSIZE);
@@ -5093,7 +5158,7 @@ void implementRead() {
 }
 
 void emitWrite() {
-  createSymbolTableEntry(LIBRARY_TABLE, (int*) "write", 0, PROCEDURE, INT_T, 0, binaryLength, 1);
+  createSymbolTableEntry(LIBRARY_TABLE, (int*) "write", 0, PROCEDURE, INT_T, 0, binaryLength, 1, 0);
 
   emitIFormat(OP_LW, REG_SP, REG_A2, 0); // size
   emitIFormat(OP_ADDIU, REG_SP, REG_SP, WORDSIZE);
@@ -5209,7 +5274,7 @@ void implementWrite() {
 }
 
 void emitOpen() {
-  createSymbolTableEntry(LIBRARY_TABLE, (int*) "open", 0, PROCEDURE, INT_T, 0, binaryLength, 1);
+  createSymbolTableEntry(LIBRARY_TABLE, (int*) "open", 0, PROCEDURE, INT_T, 0, binaryLength, 1, 0);
 
   emitIFormat(OP_LW, REG_SP, REG_A2, 0); // mode
   emitIFormat(OP_ADDIU, REG_SP, REG_SP, WORDSIZE);
@@ -5315,11 +5380,11 @@ void implementOpen() {
 }
 
 void emitMalloc() {
-  createSymbolTableEntry(LIBRARY_TABLE, (int*) "malloc", 0, PROCEDURE, INTSTAR_T, 0, binaryLength, 1);
+  createSymbolTableEntry(LIBRARY_TABLE, (int*) "malloc", 0, PROCEDURE, INTSTAR_T, 0, binaryLength, 1, 0);
 
   // on boot levels higher than zero, zalloc falls back to malloc
   // assuming that page frames are zeroed on boot level zero
-  createSymbolTableEntry(LIBRARY_TABLE, (int*) "zalloc", 0, PROCEDURE, INTSTAR_T, 0, binaryLength, 1);
+  createSymbolTableEntry(LIBRARY_TABLE, (int*) "zalloc", 0, PROCEDURE, INTSTAR_T, 0, binaryLength, 1, 0);
 
   emitIFormat(OP_LW, REG_SP, REG_A0, 0); // size
   emitIFormat(OP_ADDIU, REG_SP, REG_SP, WORDSIZE);
@@ -5369,7 +5434,7 @@ void implementMalloc() {
 // -----------------------------------------------------------------
 
 void emitID() {
-  createSymbolTableEntry(LIBRARY_TABLE, (int*) "hypster_ID", 0, PROCEDURE, INT_T, 0, binaryLength, 1);
+  createSymbolTableEntry(LIBRARY_TABLE, (int*) "hypster_ID", 0, PROCEDURE, INT_T, 0, binaryLength, 1, 0);
 
   emitIFormat(OP_ADDIU, REG_ZR, REG_V0, SYSCALL_ID);
   emitRFormat(OP_SPECIAL, 0, 0, 0, 0, FCT_SYSCALL);
@@ -5394,7 +5459,7 @@ int selfie_ID() {
 }
 
 void emitCreate() {
-  createSymbolTableEntry(LIBRARY_TABLE, (int*) "hypster_create", 0, PROCEDURE, INT_T, 0, binaryLength, 1);
+  createSymbolTableEntry(LIBRARY_TABLE, (int*) "hypster_create", 0, PROCEDURE, INT_T, 0, binaryLength, 1, 0);
 
   emitIFormat(OP_ADDIU, REG_ZR, REG_V0, SYSCALL_CREATE);
   emitRFormat(OP_SPECIAL, 0, 0, 0, 0, FCT_SYSCALL);
@@ -5445,7 +5510,7 @@ int selfie_create() {
 }
 
 void emitSwitch() {
-  createSymbolTableEntry(LIBRARY_TABLE, (int*) "hypster_switch", 0, PROCEDURE, INT_T, 0, binaryLength, 1);
+  createSymbolTableEntry(LIBRARY_TABLE, (int*) "hypster_switch", 0, PROCEDURE, INT_T, 0, binaryLength, 1, 0);
 
   emitIFormat(OP_LW, REG_SP, REG_A0, 0); // ID of context to which we switch
   emitIFormat(OP_ADDIU, REG_SP, REG_SP, WORDSIZE);
@@ -5534,7 +5599,7 @@ int selfie_switch(int toID) {
 }
 
 void emitStatus() {
-  createSymbolTableEntry(LIBRARY_TABLE, (int*) "hypster_status", 0, PROCEDURE, INT_T, 0, binaryLength, 1);
+  createSymbolTableEntry(LIBRARY_TABLE, (int*) "hypster_status", 0, PROCEDURE, INT_T, 0, binaryLength, 1, 0);
 
   emitIFormat(OP_ADDIU, REG_ZR, REG_V0, SYSCALL_STATUS);
   emitRFormat(OP_SPECIAL, 0, 0, 0, 0, FCT_SYSCALL);
@@ -5576,7 +5641,7 @@ int selfie_status() {
 }
 
 void emitDelete() {
-  createSymbolTableEntry(LIBRARY_TABLE, (int*) "hypster_delete", 0, PROCEDURE, VOID_T, 0, binaryLength, 1);
+  createSymbolTableEntry(LIBRARY_TABLE, (int*) "hypster_delete", 0, PROCEDURE, VOID_T, 0, binaryLength, 1, 0);
 
   emitIFormat(OP_LW, REG_SP, REG_A0, 0); // context ID
   emitIFormat(OP_ADDIU, REG_SP, REG_SP, WORDSIZE);
@@ -5627,7 +5692,7 @@ void selfie_delete(int ID) {
 }
 
 void emitMap() {
-  createSymbolTableEntry(LIBRARY_TABLE, (int*) "hypster_map", 0, PROCEDURE, VOID_T, 0, binaryLength, 1);
+  createSymbolTableEntry(LIBRARY_TABLE, (int*) "hypster_map", 0, PROCEDURE, VOID_T, 0, binaryLength, 1, 0);
 
   emitIFormat(OP_LW, REG_SP, REG_A2, 0); // frame
   emitIFormat(OP_ADDIU, REG_SP, REG_SP, WORDSIZE);
