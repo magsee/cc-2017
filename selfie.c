@@ -459,7 +459,7 @@ int  getValue(int* entry)         { return        *(entry + 5); }
 int  getAddress(int* entry)       { return        *(entry + 6); }
 int  getScope(int* entry)         { return        *(entry + 7); }
 int  getSize(int* entry)          { return        *(entry + 8); }
-int  getdimensions(int* entry)   { return        *(entry + 9); }
+int  getDimensions(int* entry)   { return        *(entry + 9); }
 
 void setNextEntry(int* entry, int* next)          { *entry       = (int) next; }
 void setString(int* entry, int* identifier)       { *(entry + 1) = (int) identifier; }
@@ -470,7 +470,7 @@ void setValue(int* entry, int value)              { *(entry + 5) = value; }
 void setAddress(int* entry, int address)          { *(entry + 6) = address; }
 void setScope(int* entry, int scope)              { *(entry + 7) = scope; }
 void setSize(int* entry, int size)                { *(entry + 8) = size; }
-void setdimensions(int* entry, int dimensions)  { *(entry + 9) = dimensions; }
+void setDimensions(int* entry, int dimensions)  { *(entry + 9) = dimensions; }
 
 
 // dimension size table entry:
@@ -576,6 +576,7 @@ int  gr_initialization(int type);
 void gr_procedure(int* procedure, int type);
 void gr_cstar();
 int gr_selector();
+void load_indexOffset(int name);
 
 // ------------------------ GLOBAL VARIABLES -----------------------
 
@@ -2465,7 +2466,7 @@ void createSymbolTableEntry(int whichTable, int* string, int line, int class, in
   setValue(newEntry, value);
   setAddress(newEntry, address);
   setSize(newEntry, size);
-  setdimensions(newEntry, dimensions);
+  setDimensions(newEntry, dimensions);
 
   // create entry at head of symbol table
   if (whichTable == GLOBAL_TABLE) {
@@ -3726,10 +3727,9 @@ void gr_statement() {
   int rtype;
   int* variableOrProcedureName;
   int* entry;
-  int isArraay;
-  int index;
+  int isArray;
 
-  index = 1;
+  isArray = 0;
 
   // assert: allocatedTemporaries == 0;
 
@@ -3828,10 +3828,8 @@ void gr_statement() {
     getSymbol();
 
     if (symbol == SYM_LBRACKET) {
-      while (symbol == SYM_LBRACKET) {
-        gr_selector();
-
-      }
+      load_indexOffset(variableOrProcedureName);
+      isArray = 1;
     }
 
     // procedure call
@@ -3857,12 +3855,29 @@ void gr_statement() {
 
       getSymbol();
 
+      if(isArray) {
+        load_integer(-getAddress(entry));
+        printInteger(-getAddress(entry));
+        println();
+        emitRFormat(OP_SPECIAL, getScope(entry), currentTemporary(), currentTemporary(), 0, FCT_SUBU);
+        emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_ADDU);
+        tfree(1);
+      }
+
       rtype = gr_expression();
 
       if (ltype != rtype)
         typeWarning(ltype, rtype);
 
-      emitIFormat(OP_SW, getScope(entry), currentTemporary(), getAddress(entry));
+      if (isArray) {
+        emitIFormat(OP_SW, previousTemporary(), currentTemporary(), 0);
+        tfree(1);
+        isArray = 0;
+        print("bla");
+        println();
+      } else {
+        emitIFormat(OP_SW, getScope(entry), currentTemporary(), getAddress(entry));
+      }
 
       tfree(1);
 
@@ -4270,6 +4285,23 @@ int gr_selector() {
     syntaxErrorSymbol(SYM_RBRACKET);
 
   return size;
+}
+
+void load_indexOffset(int name) {
+  int* dimensions;
+
+  dimensions = getDimensions(getScopedSymbolTableEntry(name, VARIABLE));
+  gr_selector();
+  while (symbol == SYM_LBRACKET) {
+    load_integer(getDimSize(getNextEntry(dimensions)));
+    emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), 0, 0, FCT_MULTU);
+    emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), 0, FCT_MFLO);
+    tfree(1);
+    gr_selector();
+    emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_ADDU);
+    tfree(1);
+    dimensions = getNextEntry(dimensions);
+  }
 }
 
 // -----------------------------------------------------------------
@@ -4800,6 +4832,7 @@ int copyStringToBinary(int* s, int baddr) {
 
 void emitGlobalsStrings() {
   int* entry;
+  int i;
 
   entry = global_symbol_table;
 
@@ -4808,9 +4841,13 @@ void emitGlobalsStrings() {
   // allocate space for global variables and copy strings
   while ((int) entry != 0) {
     if (getClass(entry) == VARIABLE) {
-      storeBinary(binaryLength, getValue(entry));
+      i = 0;
+      while (i < getSize(entry)) {
+        storeBinary(binaryLength, getValue(entry));
 
-      binaryLength = binaryLength + WORDSIZE;
+        binaryLength = binaryLength + WORDSIZE;
+        i = i + 1;
+      }
     } else if (getClass(entry) == STRING)
       binaryLength = copyStringToBinary(getString(entry), binaryLength);
 
@@ -5801,6 +5838,9 @@ int isPageMapped(int* table, int page) {
 }
 
 int isValidVirtualAddress(int vaddr) {
+  //println();
+  //printInteger(vaddr);
+  //println();
   if (vaddr >= 0)
     if (vaddr < VIRTUALMEMORYSIZE)
       // memory must be word-addressed for lack of byte-sized data type
