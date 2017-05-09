@@ -3884,8 +3884,6 @@ void gr_statement() {
         emitIFormat(OP_SW, previousTemporary(), currentTemporary(), 0);
         tfree(1);
         isArray = 0;
-        print("bla");
-        println();
       } else {
         emitIFormat(OP_SW, getScope(entry), currentTemporary(), getAddress(entry));
       }
@@ -4194,11 +4192,10 @@ void gr_cstar() {
   int* dimensions;
   int dimSize;
 
-  size = 1;
-  dimensions = (int*) 0;
-  dimSize = 0;
-
   while (symbol != SYM_EOF) {
+    size = 1;
+    dimensions = (int*) 0;
+    dimSize = 0;
     while (lookForType()) {
       syntaxErrorUnexpected();
 
@@ -4264,6 +4261,9 @@ void gr_cstar() {
 
           if (entry == (int*) 0) {
             allocatedMemory = allocatedMemory + size * WORDSIZE;
+
+          printInteger(allocatedMemory);
+          println();
 
             createSymbolTableEntry(GLOBAL_TABLE, variableOrProcedureName, currentLineNumber, VARIABLE, type, initialValue, -allocatedMemory, size, dimensions);
           } else {
