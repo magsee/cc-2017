@@ -165,7 +165,7 @@ int CHAR_RBRACKET     = ']';
 int SIZEOFINT     = 4; // must be the same as WORDSIZE
 int SIZEOFINTSTAR = 4; // must be the same as WORDSIZE
 
-int* power_of_two_table;
+int power_of_two_table[31];
 
 int INT_MAX; // maximum numerical value of a signed 32-bit integer
 int INT_MIN; // minimum numerical value of a signed 32-bit integer
@@ -217,15 +217,14 @@ void initLibrary() {
 
   // powers of two table with 31 entries for 2^0 to 2^30
   // avoiding overflow for 2^31 and larger numbers with 32-bit signed integers
-  power_of_two_table = malloc(31 * SIZEOFINT);
 
-  *power_of_two_table = 1; // 2^0 == 1
+  power_of_two_table[0] = 1; // 2^0 == 1
 
   i = 1;
 
   while (i < 31) {
     // compute powers of two incrementally using this recurrence relation
-    *(power_of_two_table + i) = *(power_of_two_table + (i - 1)) * 2;
+    power_of_two_table[i] = power_of_two_table[i - 1] * 2;
 
     i = i + 1;
   }
@@ -671,45 +670,79 @@ int REG_SP = 29;
 int REG_FP = 30;
 int REG_RA = 31;
 
-int* REGISTERS; // strings representing registers
+int REGISTERS[2][32]; // strings representing registers
+int ABBR = 0;
+int NAME = 1;
 
 // ------------------------- INITIALIZATION ------------------------
 
 void initRegister() {
-  REGISTERS = malloc(NUMBEROFREGISTERS * SIZEOFINTSTAR);
 
-  *(REGISTERS + REG_ZR) = (int) "$zero";
-  *(REGISTERS + REG_AT) = (int) "$at";
-  *(REGISTERS + REG_V0) = (int) "$v0";
-  *(REGISTERS + REG_V1) = (int) "$v1";
-  *(REGISTERS + REG_A0) = (int) "$a0";
-  *(REGISTERS + REG_A1) = (int) "$a1";
-  *(REGISTERS + REG_A2) = (int) "$a2";
-  *(REGISTERS + REG_A3) = (int) "$a3";
-  *(REGISTERS + REG_T0) = (int) "$t0";
-  *(REGISTERS + REG_T1) = (int) "$t1";
-  *(REGISTERS + REG_T2) = (int) "$t2";
-  *(REGISTERS + REG_T3) = (int) "$t3";
-  *(REGISTERS + REG_T4) = (int) "$t4";
-  *(REGISTERS + REG_T5) = (int) "$t5";
-  *(REGISTERS + REG_T6) = (int) "$t6";
-  *(REGISTERS + REG_T7) = (int) "$t7";
-  *(REGISTERS + REG_S0) = (int) "$s0";
-  *(REGISTERS + REG_S1) = (int) "$s1";
-  *(REGISTERS + REG_S2) = (int) "$s2";
-  *(REGISTERS + REG_S3) = (int) "$s3";
-  *(REGISTERS + REG_S4) = (int) "$s4";
-  *(REGISTERS + REG_S5) = (int) "$s5";
-  *(REGISTERS + REG_S6) = (int) "$s6";
-  *(REGISTERS + REG_S7) = (int) "$s7";
-  *(REGISTERS + REG_T8) = (int) "$t8";
-  *(REGISTERS + REG_T9) = (int) "$t9";
-  *(REGISTERS + REG_K0) = (int) "$k0";
-  *(REGISTERS + REG_K1) = (int) "$k1";
-  *(REGISTERS + REG_GP) = (int) "$gp";
-  *(REGISTERS + REG_SP) = (int) "$sp";
-  *(REGISTERS + REG_FP) = (int) "$fp";
-  *(REGISTERS + REG_RA) = (int) "$ra";
+  REGISTERS[ABBR][REG_ZR] = (int) "$zero";
+  REGISTERS[ABBR][REG_AT] = (int) "$at";
+  REGISTERS[ABBR][REG_V0] = (int) "$v0";
+  REGISTERS[ABBR][REG_V1] = (int) "$v1";
+  REGISTERS[ABBR][REG_A0] = (int) "$a0";
+  REGISTERS[ABBR][REG_A1] = (int) "$a1";
+  REGISTERS[ABBR][REG_A2] = (int) "$a2";
+  REGISTERS[ABBR][REG_A3] = (int) "$a3";
+  REGISTERS[ABBR][REG_T0] = (int) "$t0";
+  REGISTERS[ABBR][REG_T1] = (int) "$t1";
+  REGISTERS[ABBR][REG_T2] = (int) "$t2";
+  REGISTERS[ABBR][REG_T3] = (int) "$t3";
+  REGISTERS[ABBR][REG_T4] = (int) "$t4";
+  REGISTERS[ABBR][REG_T5] = (int) "$t5";
+  REGISTERS[ABBR][REG_T6] = (int) "$t6";
+  REGISTERS[ABBR][REG_T7] = (int) "$t7";
+  REGISTERS[ABBR][REG_S0] = (int) "$s0";
+  REGISTERS[ABBR][REG_S1] = (int) "$s1";
+  REGISTERS[ABBR][REG_S2] = (int) "$s2";
+  REGISTERS[ABBR][REG_S3] = (int) "$s3";
+  REGISTERS[ABBR][REG_S4] = (int) "$s4";
+  REGISTERS[ABBR][REG_S5] = (int) "$s5";
+  REGISTERS[ABBR][REG_S6] = (int) "$s6";
+  REGISTERS[ABBR][REG_S7] = (int) "$s7";
+  REGISTERS[ABBR][REG_T8] = (int) "$t8";
+  REGISTERS[ABBR][REG_T9] = (int) "$t9";
+  REGISTERS[ABBR][REG_K0] = (int) "$k0";
+  REGISTERS[ABBR][REG_K1] = (int) "$k1";
+  REGISTERS[ABBR][REG_GP] = (int) "$gp";
+  REGISTERS[ABBR][REG_SP] = (int) "$sp";
+  REGISTERS[ABBR][REG_FP] = (int) "$fp";
+  REGISTERS[ABBR][REG_RA] = (int) "$ra";
+
+  REGISTERS[NAME][REG_ZR] = (int) "Always contains 0";
+  REGISTERS[NAME][REG_AT] = (int) "Assembler temporary";
+  REGISTERS[NAME][REG_V0] = (int) "Function return value";
+  REGISTERS[NAME][REG_V1] = (int) "Function return value";
+  REGISTERS[NAME][REG_A0] = (int) "Function parameters";
+  REGISTERS[NAME][REG_A1] = (int) "Function parameters";
+  REGISTERS[NAME][REG_A2] = (int) "Function parameters";
+  REGISTERS[NAME][REG_A3] = (int) "Function parameters";
+  REGISTERS[NAME][REG_T0] = (int) "Function temporary values";
+  REGISTERS[NAME][REG_T1] = (int) "Function temporary values";
+  REGISTERS[NAME][REG_T2] = (int) "Function temporary values";
+  REGISTERS[NAME][REG_T3] = (int) "Function temporary values";
+  REGISTERS[NAME][REG_T4] = (int) "Function temporary values";
+  REGISTERS[NAME][REG_T5] = (int) "Function temporary values";
+  REGISTERS[NAME][REG_T6] = (int) "Function temporary values";
+  REGISTERS[NAME][REG_T7] = (int) "Function temporary values";
+  REGISTERS[NAME][REG_S0] = (int) "Saved registers across function calls";
+  REGISTERS[NAME][REG_S1] = (int) "Saved registers across function calls";
+  REGISTERS[NAME][REG_S2] = (int) "Saved registers across function calls";
+  REGISTERS[NAME][REG_S3] = (int) "Saved registers across function calls";
+  REGISTERS[NAME][REG_S4] = (int) "Saved registers across function calls";
+  REGISTERS[NAME][REG_S5] = (int) "Saved registers across function calls";
+  REGISTERS[NAME][REG_S6] = (int) "Saved registers across function calls";
+  REGISTERS[NAME][REG_S7] = (int) "Saved registers across function calls";
+  REGISTERS[NAME][REG_T8] = (int) "Function temporary values";
+  REGISTERS[NAME][REG_T9] = (int) "Function temporary values";
+  REGISTERS[NAME][REG_K0] = (int) "Reserved for interrupt handler";
+  REGISTERS[NAME][REG_K1] = (int) "Reserved for interrupt handler";
+  REGISTERS[NAME][REG_GP] = (int) "Global pointer";
+  REGISTERS[NAME][REG_SP] = (int) "Stack Pointer";
+  REGISTERS[NAME][REG_FP] = (int) "Frame pointer";
+  REGISTERS[NAME][REG_RA] = (int) "Return address";
 }
 
 // -----------------------------------------------------------------
@@ -1362,7 +1395,7 @@ void initSelfie(int argc, int* argv) {
 
 int twoToThePowerOf(int p) {
   // assert: 0 <= p < 31
-  return *(power_of_two_table + p);
+  return power_of_two_table[p];
 }
 
 int rightShift(int n, int b) {
@@ -4262,9 +4295,6 @@ void gr_cstar() {
           if (entry == (int*) 0) {
             allocatedMemory = allocatedMemory + size * WORDSIZE;
 
-          printInteger(allocatedMemory);
-          println();
-
             createSymbolTableEntry(GLOBAL_TABLE, variableOrProcedureName, currentLineNumber, VARIABLE, type, initialValue, -allocatedMemory, size, dimensions);
           } else {
             // global variable already declared or defined
@@ -4565,7 +4595,7 @@ void selfie_compile() {
 // -----------------------------------------------------------------
 
 void printRegister(int reg) {
-  print((int*) *(REGISTERS + reg));
+  print((int*) REGISTERS[ABBR][reg]);
 }
 
 // -----------------------------------------------------------------
@@ -6557,9 +6587,6 @@ void op_lw() {
         throwException(EXCEPTION_PAGEFAULT, vaddr);
     } else {
       // TODO: pass invalid vaddr
-      println();
-      printInteger(vaddr);
-      println();
       throwException(EXCEPTION_ADDRESSERROR, 0);
     }
   }
@@ -6660,9 +6687,6 @@ void op_sw() {
         throwException(EXCEPTION_PAGEFAULT, vaddr);
     } else {
       // TODO: pass invalid vaddr
-      println();
-      printInteger(vaddr);
-      println();
       throwException(EXCEPTION_ADDRESSERROR, 0);
     }
   }
