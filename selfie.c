@@ -459,7 +459,7 @@ int  getValue(int* entry)         { return        *(entry + 5); }
 int  getAddress(int* entry)       { return        *(entry + 6); }
 int  getScope(int* entry)         { return        *(entry + 7); }
 int  getSize(int* entry)          { return        *(entry + 8); }
-int  getDimensions(int* entry)   { return        *(entry + 9); }
+int* getDimensions(int* entry)    { return (int*) *(entry + 9); }
 
 void setNextEntry(int* entry, int* next)          { *entry       = (int) next; }
 void setString(int* entry, int* identifier)       { *(entry + 1) = (int) identifier; }
@@ -470,7 +470,7 @@ void setValue(int* entry, int value)              { *(entry + 5) = value; }
 void setAddress(int* entry, int address)          { *(entry + 6) = address; }
 void setScope(int* entry, int scope)              { *(entry + 7) = scope; }
 void setSize(int* entry, int size)                { *(entry + 8) = size; }
-void setDimensions(int* entry, int dimensions)  { *(entry + 9) = dimensions; }
+void setDimensions(int* entry, int* dimensions)   { *(entry + 9) = (int) dimensions; }
 
 
 // dimension size table entry:
@@ -479,9 +479,9 @@ void setDimensions(int* entry, int dimensions)  { *(entry + 9) = dimensions; }
 // |  1 | size    | size of the dimension
 // +----+---------+
 
-int getDimSize(int* entry)  { return (int*) *(entry + 1); }
+int getDimSize(int* entry)  { return *(entry + 1); }
 
-void setDimSize(int* entry, int dimSize)  { *(entry + 1) = (int) dimSize; }
+void setDimSize(int* entry, int dimSize)  { *(entry + 1) = dimSize; }
 
 // ------------------------ GLOBAL CONSTANTS -----------------------
 
@@ -576,7 +576,7 @@ int  gr_initialization(int type);
 void gr_procedure(int* procedure, int type);
 void gr_cstar();
 int gr_selector();
-void load_indexOffset(int name);
+void load_indexOffset(int* name);
 
 // ------------------------ GLOBAL VARIABLES -----------------------
 
@@ -858,7 +858,7 @@ void selfie_load();
 
 // ------------------------ GLOBAL CONSTANTS -----------------------
 
-int maxBinaryLength = 131072; // 128KB
+int maxBinaryLength = 262144; // 256KB
 
 // ------------------------ GLOBAL VARIABLES -----------------------
 
@@ -2448,6 +2448,8 @@ int maxIntegerLength(int base) {
     return 11;
   else if (base == 16)
     return 8;
+  else
+    return 10;
 }
 
 // -----------------------------------------------------------------
@@ -3091,6 +3093,7 @@ int gr_factor() {
   int hasCast;
   int cast;
   int type;
+  int* entry;
 
   int* variableOrProcedureName;
 
@@ -3190,9 +3193,19 @@ int gr_factor() {
       // reset return register to initial return value
       // for missing return expressions
       emitIFormat(OP_ADDIU, REG_ZR, REG_V0, 0);
-    } else
+    } else {
       // variable access: identifier
-      type = load_variable(variableOrProcedureName);
+      if (symbol == SYM_LBRACKET) {
+        entry = getVariable(variableOrProcedureName);
+        load_indexOffset(variableOrProcedureName);
+        load_integer(-getAddress(entry));
+        emitRFormat(OP_SPECIAL, getScope(entry), currentTemporary(), currentTemporary(), 0, FCT_SUBU);
+        emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_ADDU);
+        tfree(1);
+        emitIFormat(OP_LW, currentTemporary(), currentTemporary(), 0);
+      } else
+        type = load_variable(variableOrProcedureName);
+    }
 
   // integer?
   } else if (symbol == SYM_INTEGER) {
@@ -3857,8 +3870,6 @@ void gr_statement() {
 
       if(isArray) {
         load_integer(-getAddress(entry));
-        printInteger(-getAddress(entry));
-        println();
         emitRFormat(OP_SPECIAL, getScope(entry), currentTemporary(), currentTemporary(), 0, FCT_SUBU);
         emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_ADDU);
         tfree(1);
@@ -4287,7 +4298,7 @@ int gr_selector() {
   return size;
 }
 
-void load_indexOffset(int name) {
+void load_indexOffset(int* name) {
   int* dimensions;
 
   dimensions = getDimensions(getScopedSymbolTableEntry(name, VARIABLE));
@@ -4302,6 +4313,7 @@ void load_indexOffset(int name) {
     tfree(1);
     dimensions = getNextEntry(dimensions);
   }
+  emitLeftShiftBy(2);
 }
 
 // -----------------------------------------------------------------
@@ -6543,9 +6555,13 @@ void op_lw() {
         pc = pc + WORDSIZE;
       } else
         throwException(EXCEPTION_PAGEFAULT, vaddr);
-    } else
+    } else {
       // TODO: pass invalid vaddr
+      println();
+      printInteger(vaddr);
+      println();
       throwException(EXCEPTION_ADDRESSERROR, 0);
+    }
   }
 
   if (debug) {
@@ -6642,9 +6658,13 @@ void op_sw() {
         pc = pc + WORDSIZE;
       } else
         throwException(EXCEPTION_PAGEFAULT, vaddr);
-    } else
+    } else {
       // TODO: pass invalid vaddr
+      println();
+      printInteger(vaddr);
+      println();
       throwException(EXCEPTION_ADDRESSERROR, 0);
+    }
   }
 
   if (debug) {
