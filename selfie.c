@@ -543,6 +543,37 @@ int* local_symbol_table   = (int*) 0;
 int* library_symbol_table = (int*) 0;
 int* struct_table         = (int*) 0;
 
+struct symbol_table_t {
+  struct symbol_table_t * next;
+  int* string;
+  int line;
+  int class;
+  struct type_t * type;
+  int value;
+  int address;
+  int scope;
+  int size;
+  int* dimensions;
+};
+
+struct type_t {
+  int type;
+  struct dimension_t * dimensions;
+  struct field_t * fields;
+};
+
+struct dimension_t {
+  struct dimension_t * next;
+  int size;
+};
+
+struct field_t {
+  struct field_t * next;
+  int* name;
+  struct type_t * type;
+  int offset;
+};
+
 int numberOfGlobalVariables = 0;
 int numberOfProcedures      = 0;
 int numberOfStrings         = 0;
