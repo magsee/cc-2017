@@ -614,6 +614,7 @@ void gr_procedure(int* procedure, int type);
 void gr_cstar();
 int gr_selector();
 void load_indexOffset(int* name);
+void gr_struct();
 
 // ------------------------ GLOBAL VARIABLES -----------------------
 
@@ -2669,6 +2670,59 @@ int* createDimTableEntry(int* table, int size) {
   return table;
 }
 
+int* createStructTableEntry(int* table, int* string, int size, int* fields) {
+  int* newEntry;
+  int* temp;
+
+  newEntry = malloc(3 * SIZEOFINTSTAR + SIZEOFINT);
+
+  setNextEntry(newEntry, (int*) 0);
+  setString(newEntry, string)
+  setStructSize(newEntry, size);
+  setFields(newEntry, fields);
+
+  if (table == (int*) 0) {
+    table = newEntry;
+    return table;
+  }
+
+  temp = table;
+
+  while (getNextEntry(temp) != (int*) 0) {
+    temp = getNextEntry(temp);
+  }
+  setNextEntry(temp, newEntry);
+
+  return table;
+}
+
+int* createFieldTableEntry(int* table, int* string, int type, int size, int* dim) {
+  int* newEntry;
+  int* temp;
+
+  newEntry = malloc(3 * SIZEOFINTSTAR + 2* SIZEOFINT);
+
+  setNextEntry(newEntry, (int*) 0);
+  setString(newEntry, string);
+  setFieldType(newEntry, type);
+  setFieldSize(newEntry, size);
+  setFieldDimensions(newEntry, dim);
+
+  if (table == (int*) 0) {
+    table = newEntry;
+    return table;
+  }
+
+  temp = table;
+
+  while (getNextEntry(temp) != (int*) 0) {
+    temp = getNextEntry(temp);
+  }
+  setNextEntry(temp, newEntry);
+
+  return table;
+}
+
 // -----------------------------------------------------------------
 // ---------------------------- PARSER -----------------------------
 // -----------------------------------------------------------------
@@ -4313,7 +4367,7 @@ void gr_cstar() {
 
         getSymbol();
 
-        gr_struct();
+        struct_table = gr_struct();
 
       } else
         syntaxErrorSymbol(SYM_LBRACE);
@@ -4409,6 +4463,41 @@ void load_indexOffset(int* name) {
     dimensions = getNextEntry(dimensions);
   }
   emitLeftShiftBy(2);
+}
+
+void gr_struct() {
+  int* entry;
+  int size;
+  int type;
+  int* variableName;
+
+  entry = (int*) 0;
+  size = 1;
+
+  while (symbol != SYM_RBRACE) {
+
+    type = gr_type();
+
+    getSymbol();
+
+    if (symbol == SYM_IDENTIFIER) {
+
+      variableName = identifier;
+
+      getSymbol();
+
+      if (symbol == SYM_SEMICOLON) {
+
+
+
+      } else
+        syntaxErrorSymbol(SYM_SEMICOLON);
+
+    } else
+      syntaxErrorSymbol(SYM_IDENTIFIER);
+
+  }
+
 }
 
 // -----------------------------------------------------------------
