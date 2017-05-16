@@ -329,6 +329,7 @@ int SYM_OR           = 31; // |
 int SYM_NOT          = 32; // ~
 int SYM_LBRACKET     = 33; // [
 int SYM_RBRACKET     = 34; // ]
+int SYM_STRUCT       = 35; // struct
 
 int* SYMBOLS; // strings representing symbols
 
@@ -365,7 +366,7 @@ int  sourceFD   = 0;        // file descriptor of open source file
 // ------------------------- INITIALIZATION ------------------------
 
 void initScanner () {
-  SYMBOLS = malloc(35 * SIZEOFINTSTAR);
+  SYMBOLS = malloc(36 * SIZEOFINTSTAR);
 
   *(SYMBOLS + SYM_IDENTIFIER)   = (int) "identifier";
   *(SYMBOLS + SYM_INTEGER)      = (int) "integer";
@@ -402,6 +403,7 @@ void initScanner () {
   *(SYMBOLS + SYM_NOT)          = (int) "~";
   *(SYMBOLS + SYM_LBRACKET)     = (int) "[";
   *(SYMBOLS + SYM_RBRACKET)     = (int) "]";
+  *(SYMBOLS + SYM_STRUCT)       = (int) "struct";
 
   character = CHAR_EOF;
   symbol    = SYM_EOF;
@@ -482,6 +484,41 @@ int getDimSize(int* entry)  { return *(entry + 1); }
 
 void setDimSize(int* entry, int dimSize)  { *(entry + 1) = dimSize; }
 
+// struct table entry:
+// +----+---------+
+// |  0 | next    | pointer to next entry
+// |  1 | string  | identifier string
+// |  2 | size    | sum of all fields of a struct in words
+// |  3 | fields  | linked list containing all fields of a struct
+// +----+---------+
+
+int* getNextEntry(int* entry)     { return (int*) *entry; }
+int* getString(int* entry)        { return (int*) *(entry + 1); }
+int  getStructSize(int* entry)    { return        *(entry + 2); }
+int* getFields(int* entry)        { return (int*) *(entry + 3); }
+
+void setNextEntry(int* entry, int* next)          { *entry       = (int) next; }
+void setString(int* entry, int* identifier)       { *(entry + 1) = (int) identifier; }
+void setStructSize(int* entry, int size)          { *(entry + 2) = size; }
+void setFields(int* entry, int* fields)           { *(entry + 3) = (int) fields; }
+
+// field table entry:
+// +----+---------+
+// |  0 | next    | pointer to next entry
+// |  1 | string  | identifier string
+// |  2 | type    | INT_T, INTSTAR_T, VOID_T
+// |  3 | size    | sum of all fields of a struct in words
+// |  4 | dim     | dimensions table for size of each dimension
+// +----+---------+
+
+int  getFieldType(int* entry)      { return        *(entry + 2); }
+int  getFieldSize(int* entry)      { return        *(entry + 3); }
+int* getFieldDimension(int* entry) { return (int*) *(entry + 4); }
+
+void setFieldType(int* entry, int type)               { *(entry + 2) = type; }
+void setFieldSize(int* entry, int size)               { *(entry + 3) = size; }
+void setFieldDimensions(int* entry, int* dimensions)  { *(entry + 4) = (int) dimensions; }
+
 // ------------------------ GLOBAL CONSTANTS -----------------------
 
 // classes
@@ -505,6 +542,7 @@ int LIBRARY_TABLE = 3;
 int* global_symbol_table  = (int*) 0;
 int* local_symbol_table   = (int*) 0;
 int* library_symbol_table = (int*) 0;
+int* struct_table         = (int*) 0;
 
 int numberOfGlobalVariables = 0;
 int numberOfProcedures      = 0;
@@ -2180,6 +2218,8 @@ int identifierOrKeyword() {
     return SYM_RETURN;
   if (identifierStringMatch(SYM_VOID))
     return SYM_VOID;
+  if (identifierStringMatch(SYM_STRUCT))
+    return SYM_STRUCT;
   else
     return SYM_IDENTIFIER;
 }
@@ -2766,6 +2806,8 @@ int lookForType() {
   if (symbol == SYM_INT)
     return 0;
   else if (symbol == SYM_VOID)
+    return 0;
+  else if (symbol == SYM_STRUCT)
     return 0;
   else if (symbol == SYM_EOF)
     return 0;
@@ -4254,6 +4296,29 @@ void gr_cstar() {
         gr_procedure(variableOrProcedureName, type);
       } else
         syntaxErrorSymbol(SYM_IDENTIFIER);
+
+    } else if (symbol == SYM_STRUCT) {
+      getSymbol();
+
+      if (symbol == SYM_IDENTIFIER) {
+
+        variableOrProcedureName = identifier;
+
+        getSymbol();
+
+      } else
+        syntaxErrorSymbol(SYM_IDENTIFIER);
+
+      if (symbol == SYM_LBRACE) {
+
+        getSymbol();
+
+        gr_struct();
+
+      } else
+        syntaxErrorSymbol(SYM_LBRACE);
+
+
     } else {
       type = gr_type();
 
