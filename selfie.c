@@ -432,6 +432,7 @@ void resetSymbolTables();
 void createSymbolTableEntry(int which, int* string, int line, int class, int type, int value, int address, int size, int* dimensions);
 
 int* searchSymbolTable(int* entry, int* string, int class);
+int* searchStructTable(int* entry, int* string);
 int* getScopedSymbolTableEntry(int* string, int class);
 
 int isUndefinedProcedure(int* entry);
@@ -443,7 +444,7 @@ int reportUndefinedProcedures();
 // |  1 | string  | identifier string, string literal
 // |  2 | line#   | source line number
 // |  3 | class   | VARIABLE, PROCEDURE, STRING
-// |  4 | type    | INT_T, INTSTAR_T, VOID_T
+// |  4 | type    | INT_T, INTSTAR_T, VOID_T, STRUCT_T
 // |  5 | value   | VARIABLE: initial value
 // |  6 | address | VARIABLE: offset, PROCEDURE: address, STRING: offset
 // |  7 | scope   | REG_GP, REG_FP
@@ -492,13 +493,9 @@ void setDimSize(int* entry, int dimSize)  { *(entry + 1) = dimSize; }
 // |  3 | fields  | linked list containing all fields of a struct
 // +----+---------+
 
-int* getNextEntry(int* entry)     { return (int*) *entry; }
-int* getString(int* entry)        { return (int*) *(entry + 1); }
 int  getStructSize(int* entry)    { return        *(entry + 2); }
 int* getFields(int* entry)        { return (int*) *(entry + 3); }
 
-void setNextEntry(int* entry, int* next)          { *entry       = (int) next; }
-void setString(int* entry, int* identifier)       { *(entry + 1) = (int) identifier; }
 void setStructSize(int* entry, int size)          { *(entry + 2) = size; }
 void setFields(int* entry, int* fields)           { *(entry + 3) = (int) fields; }
 
@@ -506,7 +503,7 @@ void setFields(int* entry, int* fields)           { *(entry + 3) = (int) fields;
 // +----+---------+
 // |  0 | next    | pointer to next entry
 // |  1 | string  | identifier string
-// |  2 | type    | INT_T, INTSTAR_T, VOID_T
+// |  2 | type    | INT_T, INTSTAR_T, VOID_T, STRUCT_T
 // |  3 | size    | sum of all fields of a struct in words
 // |  4 | dim     | dimensions table for size of each dimension
 // +----+---------+
@@ -527,9 +524,11 @@ int PROCEDURE = 2;
 int STRING    = 3;
 
 // types
-int INT_T     = 1;
-int INTSTAR_T = 2;
-int VOID_T    = 3;
+int INT_T        = 1;
+int INTSTAR_T    = 2;
+int VOID_T       = 3;
+int STRUCT_T     = 4;
+int STRUCTSTAR_T = 5;
 
 // symbol tables
 int GLOBAL_TABLE  = 1;
@@ -614,7 +613,7 @@ void gr_procedure(int* procedure, int type);
 void gr_cstar();
 int gr_selector();
 void load_indexOffset(int* name);
-void gr_struct();
+int* gr_struct(int* structName);
 
 // ------------------------ GLOBAL VARIABLES -----------------------
 
@@ -2677,7 +2676,7 @@ int* createStructTableEntry(int* table, int* string, int size, int* fields) {
   newEntry = malloc(3 * SIZEOFINTSTAR + SIZEOFINT);
 
   setNextEntry(newEntry, (int*) 0);
-  setString(newEntry, string)
+  setString(newEntry, string);
   setStructSize(newEntry, size);
   setFields(newEntry, fields);
 
@@ -2721,6 +2720,17 @@ int* createFieldTableEntry(int* table, int* string, int type, int size, int* dim
   setNextEntry(temp, newEntry);
 
   return table;
+}
+
+int* searchStructTable(int* entry, int* string) {
+  while (entry != (int*) 0) {
+    if (stringCompare(string, getString(entry)))
+      return entry;
+
+    // keep looking
+    entry = getNextEntry(entry);
+  }
+  return (int*) 0;
 }
 
 // -----------------------------------------------------------------
@@ -4060,6 +4070,10 @@ int gr_type() {
 
       getSymbol();
     }
+  } else if (symbol == SYM_STRUCT) {
+    getSymbol();
+
+    type = STRUCT_T;
   } else
     syntaxErrorSymbol(SYM_INT);
 
@@ -4367,7 +4381,7 @@ void gr_cstar() {
 
         getSymbol();
 
-        struct_table = gr_struct();
+        struct_table = gr_struct(variableOrProcedureName);
 
       } else
         syntaxErrorSymbol(SYM_LBRACE);
@@ -4415,6 +4429,7 @@ void gr_cstar() {
             allocatedMemory = allocatedMemory + size * WORDSIZE;
 
             createSymbolTableEntry(GLOBAL_TABLE, variableOrProcedureName, currentLineNumber, VARIABLE, type, initialValue, -allocatedMemory, size, dimensions);
+
           } else {
             // global variable already declared or defined
             printLineNumber((int*) "warning", currentLineNumber);
@@ -4465,30 +4480,65 @@ void load_indexOffset(int* name) {
   emitLeftShiftBy(2);
 }
 
-void gr_struct() {
-  int* entry;
-  int size;
+int* gr_struct(int* structName) {
+  int* structTableEntry;
+  int* fieldTable;
+  int fieldSize;
   int type;
-  int* variableName;
+  int* fieldName;
+  int* fieldDimensions;
+  int structSize;
+  int dimSize;
 
-  entry = (int*) 0;
-  size = 1;
+  structTableEntry = (int*) 0;
+  fieldTable = (int*) 0;
+  fieldDimensions = (int*) 0;
+  structSize = 0;
 
   while (symbol != SYM_RBRACE) {
 
-    type = gr_type();
+    fieldSize = 1;
 
-    getSymbol();
+    type = gr_type();
 
     if (symbol == SYM_IDENTIFIER) {
 
-      variableName = identifier;
+      fieldName = identifier;
 
       getSymbol();
 
+      if (symbol == SYM_LBRACKET) {
+          while (symbol == SYM_LBRACKET) {
+            dimSize = gr_selector();
+            fieldSize = fieldSize * dimSize;
+            fieldDimensions = createDimTableEntry(fieldDimensions, dimSize);
+            tfree(1);
+        }
+      }
+
+      if (symbol == SYM_ASTERISK) {
+
+        getSymbol();
+
+        if (symbol == SYM_IDENTIFIER) {
+
+          fieldName = identifier;
+
+          type = STRUCTSTAR_T;
+
+          getSymbol();
+
+        }
+
+      }
+
       if (symbol == SYM_SEMICOLON) {
 
+          getSymbol();
 
+          fieldTable = createFieldTableEntry(fieldTable, fieldName, type, fieldSize, fieldDimensions);
+
+          structSize = structSize + fieldSize;
 
       } else
         syntaxErrorSymbol(SYM_SEMICOLON);
@@ -4497,6 +4547,19 @@ void gr_struct() {
       syntaxErrorSymbol(SYM_IDENTIFIER);
 
   }
+
+  getSymbol();
+
+  if (symbol == SYM_SEMICOLON) {
+
+    getSymbol();
+
+    struct_table = createStructTableEntry(structTableEntry, structName, structSize, fieldTable);
+
+  } else
+    syntaxErrorSymbol(SYM_SEMICOLON);
+
+  return struct_table;
 
 }
 
