@@ -514,13 +514,13 @@ void setFields(int* entry, int* fields)           { *(entry + 3) = (int) fields;
 // |  4 | dim     | dimensions table for size of each dimension
 // +----+---------+
 
-int  getFieldType(int* entry)      { return        *(entry + 2); }
-int  getFieldSize(int* entry)      { return        *(entry + 3); }
-int* getFieldDimension(int* entry) { return (int*) *(entry + 4); }
+int  getFieldType(int* entry)       { return        *(entry + 2); }
+int  getFieldSize(int* entry)       { return        *(entry + 3); }
+int* getFieldDimensions(int* entry) { return (int*) *(entry + 4); }
 
-void setFieldType(int* entry, int type)               { *(entry + 2) = type; }
-void setFieldSize(int* entry, int size)               { *(entry + 3) = size; }
-void setFieldDimensions(int* entry, int* dimensions)  { *(entry + 4) = (int) dimensions; }
+void setFieldType(int* entry, int type)                { *(entry + 2) = type; }
+void setFieldSize(int* entry, int size)                { *(entry + 3) = size; }
+void setFieldDimensionss(int* entry, int* dimensions)  { *(entry + 4) = (int) dimensions; }
 
 // ------------------------ GLOBAL CONSTANTS -----------------------
 
@@ -647,7 +647,7 @@ int  gr_initialization(int type);
 void gr_procedure(int* procedure, int type);
 void gr_cstar();
 int gr_selector();
-void load_indexOffset(int* name);
+void load_indexOffset(int* dimensions);
 int* gr_struct(int* structName);
 
 // ------------------------ GLOBAL VARIABLES -----------------------
@@ -2746,7 +2746,7 @@ int* createFieldTableEntry(int* table, int* string, int type, int size, int* dim
   setString(newEntry, string);
   setFieldType(newEntry, type);
   setFieldSize(newEntry, size);
-  setFieldDimensions(newEntry, dim);
+  setFieldDimensionss(newEntry, dim);
 
   if (table == (int*) 0) {
     table = newEntry;
@@ -2782,11 +2782,10 @@ int getFieldOffset(int* entry, int* name) {
   fields = getFields(entry);
 
   while (fields != (int*) 0) {
-    size = size + getFieldSize(fields);
     if (stringCompare(name, getString(fields)))
       return size;
 
-    // keep looking
+    size = size + getFieldSize(fields);
     fields = getNextEntry(fields);
   }
   return 0;
@@ -3296,6 +3295,7 @@ int gr_factor() {
   int size;
   int* structType;
   int* variableOrProcedureName;
+  int* dimensions;
 
   // assert: n = allocatedTemporaries
 
@@ -3397,7 +3397,8 @@ int gr_factor() {
       // variable access: identifier
       if (symbol == SYM_LBRACKET) {
         entry = getVariable(variableOrProcedureName);
-        load_indexOffset(variableOrProcedureName);
+        dimensions = getDimensions(getScopedSymbolTableEntry(variableOrProcedureName, VARIABLE));
+        load_indexOffset(dimensions);
         load_integer(-getAddress(entry));
         emitRFormat(OP_SPECIAL, getScope(entry), currentTemporary(), currentTemporary(), 0, FCT_SUBU);
         emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_ADDU);
@@ -3420,6 +3421,18 @@ int gr_factor() {
 
           load_variable(variableOrProcedureName);
           emitIFormat(OP_ADDIU, currentTemporary(), currentTemporary(), size);
+
+          if (symbol == SYM_LBRACKET) {
+
+            entry = getFields(entry);
+            entry = searchTable(entry, fieldName);
+            dimensions = getFieldDimensions(entry);
+            load_indexOffset(dimensions);
+            emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_ADDU);
+            tfree(1);
+
+          }
+
           emitIFormat(OP_LW, currentTemporary(), currentTemporary(), 0);
         }
       } else
@@ -3964,6 +3977,7 @@ void gr_statement() {
   int size;
   int* fieldName;
   int isStruct;
+  int* dimensions;
 
   structType = (int*) 0;
   isArray = 0;
@@ -4061,13 +4075,15 @@ void gr_statement() {
   }
   // identifier "=" expression | call
   else if (symbol == SYM_IDENTIFIER) {
+
     variableOrProcedureName = identifier;
 
     getSymbol();
 
     if (symbol == SYM_LBRACKET) {
 
-      load_indexOffset(variableOrProcedureName);
+      dimensions = getDimensions(getScopedSymbolTableEntry(variableOrProcedureName, VARIABLE));
+      load_indexOffset(dimensions);
 
       isArray = 1;
 
@@ -4088,6 +4104,17 @@ void gr_statement() {
 
         load_variable(variableOrProcedureName);
         emitIFormat(OP_ADDIU, currentTemporary(), currentTemporary(), size);
+
+        if (symbol == SYM_LBRACKET) {
+
+          entry = getFields(entry);
+          entry = searchTable(entry, fieldName);
+          dimensions = getFieldDimensions(entry);
+          load_indexOffset(dimensions);
+          emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_ADDU);
+          tfree(1);
+
+        }
 
         isStruct = 1;
 
@@ -4611,10 +4638,8 @@ int gr_selector() {
   return size;
 }
 
-void load_indexOffset(int* name) {
-  int* dimensions;
+void load_indexOffset(int* dimensions) {
 
-  dimensions = getDimensions(getScopedSymbolTableEntry(name, VARIABLE));
   gr_selector();
   while (symbol == SYM_LBRACKET) {
     load_integer(getDimSize(getNextEntry(dimensions)));
