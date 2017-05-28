@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2017, the Selfie Project authors. All rights reserved.
+  // Copyright (c) 2015-2017, the Selfie Project authors. All rights reserved.
 // Please see the AUTHORS file for details. Use of this source code is
 // governed by a BSD license that can be found in the LICENSE file.
 //
@@ -535,6 +535,7 @@ int INTSTAR_T    = 2;
 int VOID_T       = 3;
 int STRUCT_T     = 4;
 int STRUCTSTAR_T = 5;
+int ARRAY_T      = 6;
 
 // symbol tables
 int GLOBAL_TABLE  = 1;
@@ -581,6 +582,8 @@ struct field_t {
 int numberOfGlobalVariables = 0;
 int numberOfProcedures      = 0;
 int numberOfStrings         = 0;
+
+int isCall = 0;
 
 // ------------------------- INITIALIZATION ------------------------
 
@@ -3234,7 +3237,12 @@ int gr_call(int* procedure) {
   // assert: allocatedTemporaries == 0
 
   if (isExpression()) {
+
+    isCall = 1;
+
     gr_expression();
+
+    isCall = 0;
 
     // TODO: check if types/number of parameters is correct
 
@@ -3247,7 +3255,11 @@ int gr_call(int* procedure) {
     while (symbol == SYM_COMMA) {
       getSymbol();
 
+      isCall = 1;
+
       gr_expression();
+
+      isCall = 0;
 
       // push more parameters onto stack
       emitIFormat(OP_ADDIU, REG_SP, REG_SP, -WORDSIZE);
@@ -3395,15 +3407,23 @@ int gr_factor() {
       emitIFormat(OP_ADDIU, REG_ZR, REG_V0, 0);
     } else {
       // variable access: identifier
+      entry = getVariable(variableOrProcedureName);
+      type = getType(entry);
+
       if (symbol == SYM_LBRACKET) {
-        entry = getVariable(variableOrProcedureName);
         dimensions = getDimensions(getScopedSymbolTableEntry(variableOrProcedureName, VARIABLE));
         load_indexOffset(dimensions);
-        load_integer(-getAddress(entry));
-        emitRFormat(OP_SPECIAL, getScope(entry), currentTemporary(), currentTemporary(), 0, FCT_SUBU);
+        if (getScope(entry) != REG_GP) {
+          load_variable(variableOrProcedureName);
+          emitRFormat(OP_SPECIAL, REG_GP, currentTemporary(), currentTemporary(), 0, FCT_SUBU);
+        } else {
+          load_integer(-getAddress(entry));
+          emitRFormat(OP_SPECIAL, getScope(entry), currentTemporary(), currentTemporary(), 0, FCT_SUBU);
+        }
         emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_ADDU);
         tfree(1);
         emitIFormat(OP_LW, currentTemporary(), currentTemporary(), 0);
+        type = INT_T;
       } else if (symbol == SYM_RARROW) {
 
         variableOrProcedureName = identifier;
@@ -3422,6 +3442,8 @@ int gr_factor() {
           load_variable(variableOrProcedureName);
           emitIFormat(OP_ADDIU, currentTemporary(), currentTemporary(), size);
 
+          type = getFieldType(getFields(entry));
+
           if (symbol == SYM_LBRACKET) {
 
             entry = getFields(entry);
@@ -3430,13 +3452,17 @@ int gr_factor() {
             load_indexOffset(dimensions);
             emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_ADDU);
             tfree(1);
-
+            type = INT_T;
           }
 
           emitIFormat(OP_LW, currentTemporary(), currentTemporary(), 0);
         }
-      } else
+      } else {
+        if (type == ARRAY_T) {
+          load_integer(-getAddress(entry));
+        } else
         type = load_variable(variableOrProcedureName);
+      }
     }
 
   // integer?
@@ -4113,7 +4139,6 @@ void gr_statement() {
           load_indexOffset(dimensions);
           emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_ADDU);
           tfree(1);
-
         }
 
         isStruct = 1;
@@ -4148,10 +4173,16 @@ void gr_statement() {
       getSymbol();
 
       if(isArray) {
-        load_integer(-getAddress(entry));
-        emitRFormat(OP_SPECIAL, getScope(entry), currentTemporary(), currentTemporary(), 0, FCT_SUBU);
+        if (getScope(entry) != REG_GP) {
+          load_variable(variableOrProcedureName);
+          emitRFormat(OP_SPECIAL, REG_GP, currentTemporary(), currentTemporary(), 0, FCT_SUBU);
+        } else {
+          load_integer(-getAddress(entry));
+          emitRFormat(OP_SPECIAL, getScope(entry), currentTemporary(), currentTemporary(), 0, FCT_SUBU);
+        }
         emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_ADDU);
         tfree(1);
+        ltype = INT_T;
       }
 
       rtype = gr_expression();
@@ -4163,6 +4194,7 @@ void gr_statement() {
         emitIFormat(OP_SW, previousTemporary(), currentTemporary(), 0);
         tfree(1);
         isArray = 0;
+        rtype = INT_T;
       } else if (isStruct) {
         emitIFormat(OP_SW, previousTemporary(), currentTemporary(), 0);
         tfree(1);
@@ -4226,14 +4258,28 @@ int gr_type() {
 
 void gr_variable(int offset) {
   int type;
+  int dimSize;
+  int* dimensions;
+
+  dimensions = (int*) 0;
 
   type = gr_type();
 
   if (symbol == SYM_IDENTIFIER) {
     // TODO: check if identifier has already been declared
-    createSymbolTableEntry(LOCAL_TABLE, identifier, lineNumber, VARIABLE, type, 0, offset, 1, 0, 0);
 
     getSymbol();
+
+    if (symbol == SYM_LBRACKET) {
+        while (symbol == SYM_LBRACKET) {
+          dimSize = gr_selector();
+          dimensions = createDimTableEntry(dimensions, dimSize);
+          tfree(1);
+      }
+    }
+
+    createSymbolTableEntry(LOCAL_TABLE, identifier, lineNumber, VARIABLE, type, 0, offset, 1, dimensions, 0);
+
   } else {
     syntaxErrorSymbol(SYM_IDENTIFIER);
 
@@ -4585,6 +4631,7 @@ void gr_cstar() {
                 size = size * dimSize;
                 dimensions = createDimTableEntry(dimensions, dimSize);
                 tfree(1);
+                type = ARRAY_T;
             }
           }
 
