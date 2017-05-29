@@ -411,6 +411,20 @@ void initScanner () {
   symbol    = SYM_EOF;
 }
 
+struct symbol_table_t {
+  struct symbol_table_t* next;
+  int* string;
+  int line;
+  int class;
+  int type;
+  int value;
+  int address;
+  int scope;
+  int size;
+  int* dimensions;
+  int* structType;
+};
+
 void resetScanner() {
   lineNumber = 1;
 
@@ -433,7 +447,7 @@ void resetSymbolTables();
 
 void createSymbolTableEntry(int which, int* string, int line, int class, int type, int value, int address, int size, int* dimensions, int* structType);
 
-int* searchSymbolTable(int* entry, int* string, int class);
+int* searchSymbolTable(struct symbol_table_t* entry, int* string, int class);
 int* searchTable(int* entry, int* string);
 int getFieldOffset(int* entry, int* name);
 int* getScopedSymbolTableEntry(int* string, int class);
@@ -456,29 +470,29 @@ int reportUndefinedProcedures();
 // | 10 | sType   | type of struct
 // +----+---------+
 
-int* getNextEntry(int* entry)     { return (int*) *entry; }
-int* getString(int* entry)        { return (int*) *(entry + 1); }
-int  getLineNumber(int* entry)    { return        *(entry + 2); }
-int  getClass(int* entry)         { return        *(entry + 3); }
-int  getType(int* entry)          { return        *(entry + 4); }
-int  getValue(int* entry)         { return        *(entry + 5); }
-int  getAddress(int* entry)       { return        *(entry + 6); }
-int  getScope(int* entry)         { return        *(entry + 7); }
-int  getSize(int* entry)          { return        *(entry + 8); }
-int* getDimensions(int* entry)    { return (int*) *(entry + 9); }
-int* getStructType(int* entry)    { return (int*) *(entry + 10); }
+int* getNextEntry(struct symbol_table_t* entry)       { return (int*) entry->next; }
+int* getString(struct symbol_table_t* entry)          { return entry->string; }
+int  getLineNumber(struct symbol_table_t* entry)      { return entry->line; }
+int  getClass(struct symbol_table_t* entry)           { return entry->class; }
+int  getType(struct symbol_table_t* entry)            { return entry->type; }
+int  getValue(struct symbol_table_t* entry)           { return entry->value; }
+int  getAddress(struct symbol_table_t* entry)         { return entry->address; }
+int  getScope(struct symbol_table_t* entry)           { return entry->scope; }
+int  getSize(struct symbol_table_t* entry)            { return entry->size; }
+int* getDimensions(struct symbol_table_t* entry)      { return entry->dimensions; }
+int* getStructType(struct symbol_table_t* entry)      { return entry->structType; }
 
-void setNextEntry(int* entry, int* next)          { *entry       = (int) next; }
-void setString(int* entry, int* identifier)       { *(entry + 1) = (int) identifier; }
-void setLineNumber(int* entry, int line)          { *(entry + 2) = line; }
-void setClass(int* entry, int class)              { *(entry + 3) = class; }
-void setType(int* entry, int type)                { *(entry + 4) = type; }
-void setValue(int* entry, int value)              { *(entry + 5) = value; }
-void setAddress(int* entry, int address)          { *(entry + 6) = address; }
-void setScope(int* entry, int scope)              { *(entry + 7) = scope; }
-void setSize(int* entry, int size)                { *(entry + 8) = size; }
-void setDimensions(int* entry, int* dimensions)   { *(entry + 9) = (int) dimensions; }
-void setStructType(int* entry, int* structType)   { *(entry + 10) = (int) structType; }
+void setNextEntry(struct symbol_table_t* entry, struct symbol_table_t* next)   { entry->next = next; }
+void setString(struct symbol_table_t* entry, int* string)                      { entry->string = string; }
+void setLineNumber(struct symbol_table_t* entry, int line)                           { entry->line = line; }
+void setClass(struct symbol_table_t* entry, int class)                         { entry->class = class; }
+void setType(struct symbol_table_t* entry, int type)                           { entry->type = type; }
+void setValue(struct symbol_table_t* entry, int value)                         { entry->value = value; }
+void setAddress(struct symbol_table_t* entry, int address)                     { entry->address = address; }
+void setScope(struct symbol_table_t* entry, int scope)                         { entry->scope = scope; }
+void setSize(struct symbol_table_t* entry, int size)                           { entry->size = size; }
+void setDimensions(struct symbol_table_t* entry, int* dimensions)              { entry->dimensions = dimensions; }
+void setStructType(struct symbol_table_t* entry, int* structType)              { entry->structType = structType; }
 
 
 // dimension size table entry:
@@ -545,39 +559,10 @@ int LIBRARY_TABLE = 3;
 // ------------------------ GLOBAL VARIABLES -----------------------
 
 // table pointers
-int* global_symbol_table  = (int*) 0;
-int* local_symbol_table   = (int*) 0;
-int* library_symbol_table = (int*) 0;
-int* struct_table         = (int*) 0;
-
-struct symbol_table_t {
-  struct symbol_table_t* next;
-  int* string;
-  int line;
-  int class;
-  struct type_t* type;
-  int value;
-  int address;
-  int scope;
-};
-
-struct type_t {
-  int type;
-  struct dimension_t * dimensions;
-  struct field_t * fields;
-};
-
-struct dimension_t {
-  struct dimension_t * next;
-  int size;
-};
-
-struct field_t {
-  struct field_t * next;
-  int* name;
-  struct type_t * type;
-  int offset;
-};
+struct symbol_table_t* global_symbol_table;
+struct symbol_table_t* local_symbol_table;
+struct symbol_table_t* library_symbol_table;
+int* struct_table;
 
 int numberOfGlobalVariables = 0;
 int numberOfProcedures      = 0;
@@ -2572,7 +2557,7 @@ int maxIntegerLength(int base) {
 // -----------------------------------------------------------------
 
 void createSymbolTableEntry(int whichTable, int* string, int line, int class, int type, int value, int address, int size, int* dimensions, int* structType) {
-  int* newEntry;
+  struct symbol_table_t* newEntry;
 
   newEntry = malloc(4 * SIZEOFINTSTAR + 7 * SIZEOFINT);
 
@@ -2610,11 +2595,11 @@ void createSymbolTableEntry(int whichTable, int* string, int line, int class, in
   }
 }
 
-int* searchSymbolTable(int* entry, int* string, int class) {
-  while (entry != (int*) 0) {
+int* searchSymbolTable(struct symbol_table_t* entry, int* string, int class) {
+while (entry != (int*) 0) {
     if (stringCompare(string, getString(entry)))
       if (class == getClass(entry))
-        return entry;
+        return (int*) entry;
 
     // keep looking
     entry = getNextEntry(entry);
@@ -4200,7 +4185,8 @@ void gr_statement() {
 
       if (ltype != rtype)
         if (ltype != STRUCTSTAR_T)
-          typeWarning(ltype, rtype);
+          if(rtype != STRUCTSTAR_T)
+            typeWarning(ltype, rtype);
 
       if (isArray) {
         emitIFormat(OP_SW, previousTemporary(), currentTemporary(), 0);
@@ -8413,15 +8399,10 @@ int selfie() {
   return 0;
 }
 
-struct symbol_table_t* x;
-
 int main(int argc, int* argv) {
   initSelfie(argc, (int*) argv);
 
   initLibrary();
-
-  x = (int)(malloc(8 * 4));
-  x->address = 1234567;
 
   return selfie();
 }
