@@ -583,8 +583,6 @@ int numberOfGlobalVariables = 0;
 int numberOfProcedures      = 0;
 int numberOfStrings         = 0;
 
-int isCall = 0;
-
 // ------------------------- INITIALIZATION ------------------------
 
 void resetSymbolTables() {
@@ -611,6 +609,7 @@ int isPlusOrMinus();
 int isLshiftOrRshift();
 int isComparison();
 int isANDorOR();
+int isIntOrStruct();
 
 int lookForFactor();
 int lookForStatement();
@@ -2890,6 +2889,15 @@ int isANDorOR(){
     return 0;
 }
 
+int isIntOrStruct() {
+  if (symbol == SYM_INT)
+    return 1;
+  else if (symbol == SYM_STRUCT)
+    return 1;
+  else
+    return 0;
+}
+
 
 int lookForFactor() {
   if (symbol == SYM_LPARENTHESIS)
@@ -3040,6 +3048,11 @@ void printType(int type) {
     print((int*) "int*");
   else if (type == VOID_T)
     print((int*) "void");
+  else if (type == ARRAY_T) {
+    print((int*) "array");
+  } else if (type == STRUCTSTAR_T) {
+    print((int*) "struct*");
+  }
   else
     print((int*) "unknown");
 }
@@ -3238,11 +3251,7 @@ int gr_call(int* procedure) {
 
   if (isExpression()) {
 
-    isCall = 1;
-
     gr_expression();
-
-    isCall = 0;
 
     // TODO: check if types/number of parameters is correct
 
@@ -3255,11 +3264,7 @@ int gr_call(int* procedure) {
     while (symbol == SYM_COMMA) {
       getSymbol();
 
-      isCall = 1;
-
       gr_expression();
-
-      isCall = 0;
 
       // push more parameters onto stack
       emitIFormat(OP_ADDIU, REG_SP, REG_SP, -WORDSIZE);
@@ -3427,7 +3432,7 @@ int gr_factor() {
       } else if (symbol == SYM_RARROW) {
 
         variableOrProcedureName = identifier;
-        structType = getStructType(searchSymbolTable(global_symbol_table, variableOrProcedureName, VARIABLE));
+        structType = getStructType(getVariable(variableOrProcedureName));
 
         getSymbol();
 
@@ -3442,7 +3447,7 @@ int gr_factor() {
           load_variable(variableOrProcedureName);
           emitIFormat(OP_ADDIU, currentTemporary(), currentTemporary(), size);
 
-          type = getFieldType(getFields(entry));
+          type = getFieldType(searchTable(getFields(entry), fieldName));
 
           if (symbol == SYM_LBRACKET) {
 
@@ -3460,6 +3465,7 @@ int gr_factor() {
       } else {
         if (type == ARRAY_T) {
           load_integer(-getAddress(entry));
+          type = INT_T;
         } else
         type = load_variable(variableOrProcedureName);
       }
@@ -4004,6 +4010,7 @@ void gr_statement() {
   int* fieldName;
   int isStruct;
   int* dimensions;
+  int fieldType;
 
   structType = (int*) 0;
   isArray = 0;
@@ -4115,7 +4122,7 @@ void gr_statement() {
 
     } else if (symbol == SYM_RARROW) {
 
-      structType = getStructType(searchSymbolTable(global_symbol_table, variableOrProcedureName, VARIABLE));
+      structType = getStructType(getVariable(variableOrProcedureName));
 
       getSymbol();
 
@@ -4127,6 +4134,7 @@ void gr_statement() {
 
         entry = searchTable(struct_table, structType);
         size = getFieldOffset(entry, fieldName) * WORDSIZE;
+        fieldType = getFieldType(searchTable(getFields(entry), fieldName));
 
         load_variable(variableOrProcedureName);
         emitIFormat(OP_ADDIU, currentTemporary(), currentTemporary(), size);
@@ -4168,7 +4176,10 @@ void gr_statement() {
 
       entry = getVariable(variableOrProcedureName);
 
-      ltype = getType(entry);
+      if (isStruct)
+        ltype = fieldType;
+      else
+        ltype = getType(entry);
 
       getSymbol();
 
@@ -4188,7 +4199,8 @@ void gr_statement() {
       rtype = gr_expression();
 
       if (ltype != rtype)
-        typeWarning(ltype, rtype);
+        if (ltype != STRUCTSTAR_T)
+          typeWarning(ltype, rtype);
 
       if (isArray) {
         emitIFormat(OP_SW, previousTemporary(), currentTemporary(), 0);
@@ -4260,6 +4272,7 @@ void gr_variable(int offset) {
   int type;
   int dimSize;
   int* dimensions;
+  int* structType;
 
   dimensions = (int*) 0;
 
@@ -4268,17 +4281,26 @@ void gr_variable(int offset) {
   if (symbol == SYM_IDENTIFIER) {
     // TODO: check if identifier has already been declared
 
+    structType = identifier;
+
     getSymbol();
 
     if (symbol == SYM_LBRACKET) {
         while (symbol == SYM_LBRACKET) {
+          type = ARRAY_T;
           dimSize = gr_selector();
           dimensions = createDimTableEntry(dimensions, dimSize);
           tfree(1);
       }
+    } else if (symbol == SYM_ASTERISK) {
+      getSymbol();
+      if (symbol == SYM_IDENTIFIER) {
+        type = STRUCTSTAR_T;
+        getSymbol();
+      }
     }
 
-    createSymbolTableEntry(LOCAL_TABLE, identifier, lineNumber, VARIABLE, type, 0, offset, 1, dimensions, 0);
+    createSymbolTableEntry(LOCAL_TABLE, identifier, lineNumber, VARIABLE, type, 0, offset, 1, dimensions, structType);
 
   } else {
     syntaxErrorSymbol(SYM_IDENTIFIER);
@@ -4470,7 +4492,7 @@ void gr_procedure(int* procedure, int type) {
 
     localVariables = 0;
 
-    while (symbol == SYM_INT) {
+    while (isIntOrStruct()) {
       localVariables = localVariables + 1;
 
       gr_variable(-localVariables * WORDSIZE);
@@ -4577,6 +4599,8 @@ void gr_cstar() {
         struct_table = gr_struct(variableOrProcedureName);
 
       } else if (symbol == SYM_ASTERISK) {
+
+        type = STRUCTSTAR_T;
 
         getSymbol();
 
