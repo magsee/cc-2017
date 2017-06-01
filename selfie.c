@@ -444,7 +444,7 @@ struct symbol_table_t {
 };
 
 struct struct_table_t {
-  struct struct_t* next;
+  struct struct_table_t* next;
   int* string;
   int size;
   int* fields;
@@ -461,6 +461,12 @@ struct field_t {
   int type;
   int size;
   struct dimension_t* dimensions;
+};
+
+struct type_t {
+  struct type_t* next;
+  int id;
+  int* string;
 };
 
 void resetSymbolTables();
@@ -566,6 +572,22 @@ void setFieldType(struct field_t* entry, int type)                              
 void setFieldSize(struct field_t* entry, int size)                               { entry->size = size; }
 void setFieldDimensions(struct field_t* entry, struct dimension_t* dimensions)   { entry->dimensions = (int) dimensions; }
 
+
+// type table entry:
+// +----+---------+
+// | 0 | next    | pointer to next entry
+// | 1 | id      | integer identifier
+// | 2 | string  | name of type
+// +----+---------+
+
+int* getNextTypeEntry(struct type_t* entry)     { return (int*) entry->next; }
+int  getTypeID(struct type_t* entry)            { return        entry->id; }
+int* getTypeString(struct type_t* entry)        { return (int*) entry->string; }
+
+void setNextTypeEntry(struct type_t* entry, struct type_t* next)    { entry->next = (int) next; }
+void setTypeID(struct type_t* entry, int id)                        { entry->id = id; }
+void setTypeString(struct type_t* entry, int* string)               { entry->string = (int) string; }
+
 // ------------------------ GLOBAL CONSTANTS -----------------------
 
 // classes
@@ -577,9 +599,9 @@ int STRING    = 3;
 int INT_T        = 1;
 int INTSTAR_T    = 2;
 int VOID_T       = 3;
-int STRUCT_T     = 4;
-int STRUCTSTAR_T = 5;
-int ARRAY_T      = 6;
+int ARRAY_T      = 4;
+int STRUCT_T     = 5;
+int STRUCTSTAR_T = 6;
 
 // symbol tables
 int GLOBAL_TABLE  = 1;
@@ -592,11 +614,14 @@ int LIBRARY_TABLE = 3;
 struct symbol_table_t* global_symbol_table;
 struct symbol_table_t* local_symbol_table;
 struct symbol_table_t* library_symbol_table;
-int* struct_table;
+
+struct struct_table_t* struct_table;
+struct type_t* type_table;
 
 int numberOfGlobalVariables = 0;
 int numberOfProcedures      = 0;
 int numberOfStrings         = 0;
+int numberOfTypes           = 0;
 
 // ------------------------- INITIALIZATION ------------------------
 
@@ -604,6 +629,11 @@ void resetSymbolTables() {
   global_symbol_table  = (int*) 0;
   local_symbol_table   = (int*) 0;
   library_symbol_table = (int*) 0;
+
+  struct_table = (int*) 0;
+  type_table = (int*) 0;
+
+  initializeTypeTable();
 
   numberOfGlobalVariables = 0;
   numberOfProcedures      = 0;
@@ -2780,6 +2810,31 @@ int* createFieldTableEntry(struct field_t* table, int* string, int type, int siz
   return table;
 }
 
+int* createTypeTableEntry(struct type_t* table, int id, int* string) {
+  struct type_t* newEntry;
+  struct type_t* temp;
+
+  newEntry = malloc(SIZEOFINT + 2* SIZEOFINTSTAR);
+
+  setNextTypeEntry(newEntry, (int*) 0);
+  setTypeID(newEntry, id);
+  setTypeString(newEntry, string);
+
+  if (table == (int*) 0) {
+    table = newEntry;
+    return table;
+  }
+
+  temp = table;
+
+  while (getNextTypeEntry(temp) != (int*) 0) {
+    temp = getNextTypeEntry(temp);
+  }
+  setNextTypeEntry(temp, newEntry);
+
+  return table;
+}
+
 int* searchStructTable(struct struct_table_t* entry, int* string) {
   while (entry != (int*) 0) {
     if (stringCompare(string, getStructString(entry)))
@@ -2802,6 +2857,28 @@ int* searchFieldTable(struct field_t* entry, int* string) {
   return (int*) 0;
 }
 
+int* searchTypeTable(struct type_t* entry, int* string) {
+  while (entry != (int*) 0) {
+    if (stringCompare(string, getTypeString(entry)))
+      return entry;
+
+    // keep looking
+    entry = getNextTypeEntry(entry);
+  }
+  return (int*) 0;
+}
+
+int* getTypeName(struct type_t* entry, int id) {
+  while (entry != (int*) 0) {
+    if (getTypeID(entry) == id)
+      return getTypeString(entry);
+
+    // keep looking
+    entry = getNextTypeEntry(entry);
+  }
+  return (int*) 0;
+}
+
 int getFieldOffset(struct struct_table_t* entry, int* name) {
   struct field_t* fields;
   int size;
@@ -2817,6 +2894,42 @@ int getFieldOffset(struct struct_table_t* entry, int* name) {
     fields = getNextFieldEntry(fields);
   }
   return 0;
+}
+
+void initializeTypeTable() {
+
+  type_table = createTypeTableEntry(type_table, 1, "int");
+  type_table = createTypeTableEntry(type_table, 2, "int*");
+  type_table = createTypeTableEntry(type_table, 3, "void");
+  type_table = createTypeTableEntry(type_table, 4, "array");
+
+  numberOfTypes = 4;
+}
+
+void updateStructs(struct struct_table_t* table) {
+  struct struct_table_t* entry;
+  struct field_t* fields;
+  int type;
+
+  entry = table;
+
+  print(getStructString(entry));
+  println();
+
+  while (entry != (int*) 0) {
+    fields = getStructFields(entry);
+    while (fields != (int*) 0) {
+      print(getFieldString(fields));
+      println();
+      if (getFieldType(fields) == 0) {
+        printInteger(searchTypeTable(type_table, "int"));
+        println();
+        setFieldType(fields, getTypeID(searchTypeTable(type_table, getFieldString(fields))));
+      }
+      fields = getNextFieldEntry(fields);
+    }
+    entry = getNextStructEntry(entry);
+  }
 }
 
 // -----------------------------------------------------------------
@@ -3068,18 +3181,12 @@ void syntaxErrorUnexpected() {
 }
 
 void printType(int type) {
-  if (type == INT_T)
-    print((int*) "int");
-  else if (type == INTSTAR_T)
-    print((int*) "int*");
-  else if (type == VOID_T)
-    print((int*) "void");
-  else if (type == ARRAY_T) {
-    print((int*) "array");
-  } else if (type == STRUCTSTAR_T) {
-    print((int*) "struct*");
-  }
-  else
+  int* string;
+
+  string = getTypeName(type_table, type);
+  if (string != (int*) 0) {
+    print(string);
+  } else
     print((int*) "unknown");
 }
 
@@ -4318,9 +4425,9 @@ void gr_variable(int offset) {
           tfree(1);
       }
     } else if (symbol == SYM_ASTERISK) {
+      type = getTypeID(searchTypeTable(type_table, identifier));
       getSymbol();
       if (symbol == SYM_IDENTIFIER) {
-        type = STRUCTSTAR_T;
         getSymbol();
       }
     }
@@ -4621,11 +4728,18 @@ void gr_cstar() {
 
         getSymbol();
 
+        if (searchTypeTable(type_table, variableOrProcedureName) != (int*) 0) {
+          type = getTypeID(searchTypeTable(type_table, variableOrProcedureName));
+        } else {
+          numberOfTypes = numberOfTypes + 1;
+          type_table = createTypeTableEntry(type_table, numberOfTypes, variableOrProcedureName);
+        }
+
         struct_table = gr_struct(variableOrProcedureName);
 
       } else if (symbol == SYM_ASTERISK) {
 
-        type = STRUCTSTAR_T;
+        type = getTypeID(searchTypeTable(type_table, identifier));
 
         getSymbol();
 
@@ -4790,9 +4904,14 @@ int* gr_struct(int* structName) {
 
         if (symbol == SYM_IDENTIFIER) {
 
-          fieldName = identifier;
+          if (searchTypeTable(type_table, fieldName) != 0) {
+            type = getTypeID(searchTypeTable(type_table, fieldName));
+          } else {
+            numberOfTypes = numberOfTypes + 1;
+            type_table = createTypeTableEntry(type_table, numberOfTypes, fieldName);
+          }
 
-          type = STRUCTSTAR_T;
+          fieldName = identifier;
 
           getSymbol();
 
