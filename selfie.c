@@ -329,6 +329,8 @@ int SYM_LBRACKET     = 33; // [
 int SYM_RBRACKET     = 34; // ]
 int SYM_STRUCT       = 35; // struct
 int SYM_RARROW       = 36; // ->
+int SYM_LOGICALAND   = 37; // &&
+int SYM_LOGICALOR    = 38; // ||
 
 int* SYMBOLS; // strings representing symbols
 
@@ -365,7 +367,7 @@ int  sourceFD   = 0;        // file descriptor of open source file
 // ------------------------- INITIALIZATION ------------------------
 
 void initScanner () {
-  SYMBOLS = malloc(37 * SIZEOFINTSTAR);
+  SYMBOLS = malloc(39 * SIZEOFINTSTAR);
 
   *(SYMBOLS + SYM_IDENTIFIER)   = (int) "identifier";
   *(SYMBOLS + SYM_INTEGER)      = (int) "integer";
@@ -404,6 +406,8 @@ void initScanner () {
   *(SYMBOLS + SYM_RBRACKET)     = (int) "]";
   *(SYMBOLS + SYM_STRUCT)       = (int) "struct";
   *(SYMBOLS + SYM_RARROW)       = (int) "->";
+  *(SYMBOLS + SYM_LOGICALAND)   = (int) "&&";
+  *(SYMBOLS + SYM_LOGICALOR)    = (int) "||";
 
   character = CHAR_EOF;
   symbol    = SYM_EOF;
@@ -653,6 +657,7 @@ int isLshiftOrRshift();
 int isComparison();
 int isANDorOR();
 int isIntOrStruct();
+int isBooleanOperator();
 
 int lookForFactor();
 int lookForStatement();
@@ -682,6 +687,7 @@ int  gr_simpleExpression();
 int  gr_shiftExpression();
 int  gr_comparisonExpression();
 int  gr_expression();
+int  gr_booleanExpression();
 void gr_while();
 void gr_if();
 void gr_return();
@@ -2552,11 +2558,21 @@ void getSymbol() {
       } else if (character == CHAR_AND) {
         getCharacter();
 
-        symbol = SYM_AND;
+        if (character == CHAR_AND) {
+          getCharacter();
 
-      } else if(character == CHAR_OR){
+          symbol = SYM_LOGICALAND;
+        } else
+          symbol = SYM_AND;
+
+      } else if (character == CHAR_OR) {
         getCharacter();
 
+      if (character == CHAR_OR) {
+        getCharacter();
+
+        symbol = SYM_LOGICALOR;
+      } else
         symbol = SYM_OR;
 
       } else if (character == CHAR_NOT) {
@@ -2996,6 +3012,15 @@ int isIntOrStruct() {
   if (symbol == SYM_INT)
     return 1;
   else if (symbol == SYM_STRUCT)
+    return 1;
+  else
+    return 0;
+}
+
+int isBooleanOperator() {
+  if (symbol == SYM_LOGICALAND)
+    return 1;
+  else if (symbol == SYM_LOGICALOR)
     return 1;
   else
     return 0;
@@ -3896,24 +3921,67 @@ int gr_expression() {
 
   ltype = gr_comparisonExpression();
 
-  if(isANDorOR()){
+  if (isANDorOR()) {
     operatorSymbol = symbol;
 
     getSymbol();
 
     rtype = gr_comparisonExpression();
 
-    if(operatorSymbol == SYM_AND) {
+    if (operatorSymbol == SYM_AND) {
 
       emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_AND);
 
 
-    }else if(operatorSymbol == SYM_OR) {
+    } else if (operatorSymbol == SYM_OR) {
 
       emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_OR);
 
     }
     tfree(1);
+  }
+
+  return ltype;
+}
+
+int gr_booleanExpression() {
+  int ltype;
+  int operatorSymbol;
+  int rtype;
+
+  ltype = gr_expression();
+
+  if (isBooleanOperator()) {
+    operatorSymbol = symbol;
+
+    getSymbol();
+
+    rtype = gr_expression();
+
+    if (operatorSymbol == SYM_LOGICALAND) {
+
+      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_SUBU);
+
+      tfree(1);
+
+      emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 4);
+      emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
+      emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 2);
+      emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 1);
+
+    } else if (operatorSymbol == SYM_LOGICALOR) {
+
+      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_ADDU);
+
+      tfree(1);
+
+      emitIFormat(OP_BNE, REG_ZR, currentTemporary(), 4);
+      emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
+      emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 2);
+      emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 1);
+
+    }
+
   }
 
   return ltype;
@@ -3936,14 +4004,18 @@ void gr_while() {
     if (symbol == SYM_LPARENTHESIS) {
       getSymbol();
 
-      gr_expression();
+      while (symbol != SYM_RPARENTHESIS) {
 
-      // do not know where to branch, fixup later
-      brForwardToEnd = binaryLength;
+        gr_booleanExpression();
 
-      emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 0);
+        // do not know where to branch, fixup later
+        brForwardToEnd = binaryLength;
 
-      tfree(1);
+        emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 0);
+
+        tfree(1);
+
+      }
 
       if (symbol == SYM_RPARENTHESIS) {
         getSymbol();
