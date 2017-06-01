@@ -1,4 +1,4 @@
-  // Copyright (c) 2015-2017, the Selfie Project authors. All rights reserved.
+// Copyright (c) 2015-2017, the Selfie Project authors. All rights reserved.
 // Please see the AUTHORS file for details. Use of this source code is
 // governed by a BSD license that can be found in the LICENSE file.
 //
@@ -124,8 +124,6 @@ void printFixedPointRatio(int a, int b);
 void printHexadecimal(int n, int a);
 void printOctal(int n, int a);
 void printBinary(int n, int a);
-
-void printList(int* list);
 
 int roundUp(int n, int m);
 
@@ -473,7 +471,7 @@ void resetSymbolTables();
 
 void initializeTypeTable();
 
-void createSymbolTableEntry(int which, int* string, int line, int class, int type, int value, int address, int size, struct dimension_t* dimensions, int* structType);
+void createSymbolTableEntry(int which, int* string, int line, int class, int type, int value, int address, int size, int* dimensions, int* structType);
 
 struct symbol_table_t* searchSymbolTable(struct symbol_table_t* entry, int* string, int class);
 struct struct_table_t* searchStructTable(struct struct_table_t* entry, int* string);
@@ -694,8 +692,8 @@ int  gr_initialization(int type);
 void gr_procedure(int* procedure, int type);
 void gr_cstar();
 int gr_selector();
-void load_indexOffset(int* dimensions);
-int* gr_struct(int* structName);
+void load_indexOffset(struct dimension_t* dimensions);
+struct struct_table_t* gr_struct(int* structName);
 
 // ------------------------ GLOBAL VARIABLES -----------------------
 
@@ -2608,7 +2606,7 @@ int maxIntegerLength(int base) {
 // ------------------------- SYMBOL TABLE --------------------------
 // -----------------------------------------------------------------
 
-void createSymbolTableEntry(int whichTable, int* string, int line, int class, int type, int value, int address, int size, struct dimension_t* dimensions, int* structType) {
+void createSymbolTableEntry(int whichTable, int* string, int line, int class, int type, int value, int address, int size, int* dimensions, int* structType) {
   struct symbol_table_t* newEntry;
 
   newEntry = (struct symbol_table_t*)(malloc(4 * SIZEOFINTSTAR + 7 * SIZEOFINT));
@@ -4260,7 +4258,7 @@ void gr_statement() {
 
         if (symbol == SYM_LBRACKET) {
 
-          structEntry = getStructFields(structEntry);
+          fieldEntry = getStructFields(structEntry);
           fieldEntry = searchFieldTable(fieldEntry, fieldName);
           dimensions = getFieldDimensions(fieldEntry);
           load_indexOffset(dimensions);
@@ -4392,7 +4390,7 @@ void gr_variable(int offset) {
   struct dimension_t* dimensions;
   int* structType;
 
-  dimensions = (int*) 0;
+  dimensions = (struct dimension_t*) 0;
 
   type = gr_type();
 
@@ -4565,7 +4563,7 @@ void gr_procedure(int* procedure, int type) {
 
   if (symbol == SYM_SEMICOLON) {
     // this is a procedure declaration
-    if (entry == (int*) 0)
+    if (entry == (struct symbol_table_t*) 0)
       // procedure never called nor declared nor defined
       createSymbolTableEntry(GLOBAL_TABLE, procedure, lineNumber, PROCEDURE, type, 0, 0, 1, 0, 0);
     else if (getType(entry) != type)
@@ -4577,7 +4575,7 @@ void gr_procedure(int* procedure, int type) {
 
   } else if (symbol == SYM_LBRACE) {
     // this is a procedure definition
-    if (entry == (int*) 0)
+    if (entry == (struct symbol_table_t*) 0)
       // procedure never called nor declared nor defined
       createSymbolTableEntry(GLOBAL_TABLE, procedure, lineNumber, PROCEDURE, type, 0, binaryLength, 1, 0, 0);
     else {
@@ -4659,7 +4657,7 @@ void gr_procedure(int* procedure, int type) {
   } else
     syntaxErrorUnexpected();
 
-  local_symbol_table = (int*) 0;
+  local_symbol_table = (struct symbol_table_t*) 0;
 
   // assert: allocatedTemporaries == 0
 }
@@ -4677,7 +4675,7 @@ void gr_cstar() {
 
   while (symbol != SYM_EOF) {
     size = 1;
-    dimensions = (int*) 0;
+    dimensions = (struct dimension_t*) 0;
     dimSize = 0;
     structType = (int*) 0;
     while (lookForType()) {
@@ -4723,7 +4721,7 @@ void gr_cstar() {
 
         getSymbol();
 
-        if (searchTypeTable(type_table, variableOrProcedureName) != (int*) 0) {
+        if (searchTypeTable(type_table, variableOrProcedureName) != (struct type_t*) 0) {
           type = getTypeID(searchTypeTable(type_table, variableOrProcedureName));
         } else {
           numberOfTypes = numberOfTypes + 1;
@@ -4751,7 +4749,7 @@ void gr_cstar() {
 
             size = 1;
 
-            if (entry == (int*) 0) {
+            if (entry == (struct symbol_table_t*) 0) {
               allocatedMemory = allocatedMemory + size * WORDSIZE;
 
               createSymbolTableEntry(GLOBAL_TABLE, variableOrProcedureName, currentLineNumber, VARIABLE, type, initialValue, -allocatedMemory, size, dimensions, structType);
@@ -4807,7 +4805,7 @@ void gr_cstar() {
 
           entry = searchSymbolTable(global_symbol_table, variableOrProcedureName, VARIABLE);
 
-          if (entry == (int*) 0) {
+          if (entry == (struct symbol_table_t*) 0) {
             allocatedMemory = allocatedMemory + size * WORDSIZE;
 
             createSymbolTableEntry(GLOBAL_TABLE, variableOrProcedureName, currentLineNumber, VARIABLE, type, initialValue, -allocatedMemory, size, dimensions, 0);
@@ -4844,7 +4842,7 @@ int gr_selector() {
   return size;
 }
 
-void load_indexOffset(int* dimensions) {
+void load_indexOffset(struct dimension_t* dimensions) {
 
   gr_selector();
   while (symbol == SYM_LBRACKET) {
@@ -4860,7 +4858,7 @@ void load_indexOffset(int* dimensions) {
   emitLeftShiftBy(2);
 }
 
-int* gr_struct(int* structName) {
+struct struct_table_t* gr_struct(int* structName) {
   struct field_t* fieldTable;
   int fieldSize;
   int type;
@@ -4900,7 +4898,7 @@ int* gr_struct(int* structName) {
 
         if (symbol == SYM_IDENTIFIER) {
 
-          if (searchTypeTable(type_table, fieldName) != (int*) 0) {
+          if (searchTypeTable(type_table, fieldName) != (struct type_t*) 0) {
             type = getTypeID(searchTypeTable(type_table, fieldName));
           } else {
             numberOfTypes = numberOfTypes + 1;
@@ -5474,7 +5472,7 @@ int copyStringToBinary(int* s, int baddr) {
 }
 
 void emitGlobalsStrings() {
-  int* entry;
+  struct symbol_table_t* entry;
   int i;
 
   entry = global_symbol_table;
