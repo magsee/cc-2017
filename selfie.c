@@ -447,7 +447,7 @@ struct struct_table_t {
   struct struct_table_t* next;
   int* string;
   int size;
-  int* fields;
+  struct field_t* fields;
 };
 
 struct dimension_t {
@@ -471,13 +471,15 @@ struct type_t {
 
 void resetSymbolTables();
 
-void createSymbolTableEntry(int which, int* string, int line, int class, int type, int value, int address, int size, int* dimensions, int* structType);
+void initializeTypeTable();
 
-int* searchSymbolTable(struct symbol_table_t* entry, int* string, int class);
-int* searchStructTable(struct struct_table_t* entry, int* string);
-int* searchFieldTable(struct field_t*, int* string);
+void createSymbolTableEntry(int which, int* string, int line, int class, int type, int value, int address, int size, struct dimension_t* dimensions, int* structType);
+
+struct symbol_table_t* searchSymbolTable(struct symbol_table_t* entry, int* string, int class);
+struct struct_table_t* searchStructTable(struct struct_table_t* entry, int* string);
+struct field_t* searchFieldTable(struct field_t*, int* string);
 int getFieldOffset(struct struct_table_t* entry, int* name);
-int* getScopedSymbolTableEntry(int* string, int class);
+struct symbol_table_t* getScopedSymbolTableEntry(int* string, int class);
 
 int isUndefinedProcedure(int* entry);
 int reportUndefinedProcedures();
@@ -488,7 +490,7 @@ int reportUndefinedProcedures();
 // |  1 | string  | identifier string, string literal
 // |  2 | line#   | source line number
 // |  3 | class   | VARIABLE, PROCEDURE, STRING
-// |  4 | type    | INT_T, INTSTAR_T, VOID_T, STRUCT_T
+// |  4 | type    | INT_T, INTSTAR_T, VOID_T, ARRAY_T, struct types
 // |  5 | value   | VARIABLE: initial value
 // |  6 | address | VARIABLE: offset, PROCEDURE: address, STRING: offset
 // |  7 | scope   | REG_GP, REG_FP
@@ -497,20 +499,20 @@ int reportUndefinedProcedures();
 // | 10 | sType   | type of struct
 // +----+---------+
 
-int* getNextEntry(struct symbol_table_t* entry)       { return (int*) entry->next; }
-int* getString(struct symbol_table_t* entry)          { return (int*) entry->string; }
-int  getLineNumber(struct symbol_table_t* entry)      { return entry->line; }
-int  getClass(struct symbol_table_t* entry)           { return entry->class; }
-int  getType(struct symbol_table_t* entry)            { return entry->type; }
-int  getValue(struct symbol_table_t* entry)           { return entry->value; }
-int  getAddress(struct symbol_table_t* entry)         { return entry->address; }
-int  getScope(struct symbol_table_t* entry)           { return entry->scope; }
-int  getSize(struct symbol_table_t* entry)            { return entry->size; }
-int* getDimensions(struct symbol_table_t* entry)      { return (int*) entry->dimensions; }
-int* getStructType(struct symbol_table_t* entry)      { return (int*) entry->structType; }
+struct symbol_table_t* getNextEntry(struct symbol_table_t* entry)       { return entry->next; }
+int* getString(struct symbol_table_t* entry)                            { return entry->string; }
+int  getLineNumber(struct symbol_table_t* entry)                        { return entry->line; }
+int  getClass(struct symbol_table_t* entry)                             { return entry->class; }
+int  getType(struct symbol_table_t* entry)                              { return entry->type; }
+int  getValue(struct symbol_table_t* entry)                             { return entry->value; }
+int  getAddress(struct symbol_table_t* entry)                           { return entry->address; }
+int  getScope(struct symbol_table_t* entry)                             { return entry->scope; }
+int  getSize(struct symbol_table_t* entry)                              { return entry->size; }
+struct dimension_t* getDimensions(struct symbol_table_t* entry)         { return entry->dimensions; }
+int* getStructType(struct symbol_table_t* entry)                        { return entry->structType; }
 
-void setNextEntry(struct symbol_table_t* entry, struct symbol_table_t* next)      { entry->next = (int) next; }
-void setString(struct symbol_table_t* entry, int* string)                         { entry->string = (int) string; }
+void setNextEntry(struct symbol_table_t* entry, struct symbol_table_t* next)      { entry->next = next; }
+void setString(struct symbol_table_t* entry, int* string)                         { entry->string = string; }
 void setLineNumber(struct symbol_table_t* entry, int line)                        { entry->line = line; }
 void setClass(struct symbol_table_t* entry, int class)                            { entry->class = class; }
 void setType(struct symbol_table_t* entry, int type)                              { entry->type = type; }
@@ -518,8 +520,8 @@ void setValue(struct symbol_table_t* entry, int value)                          
 void setAddress(struct symbol_table_t* entry, int address)                        { entry->address = address; }
 void setScope(struct symbol_table_t* entry, int scope)                            { entry->scope = scope; }
 void setSize(struct symbol_table_t* entry, int size)                              { entry->size = size; }
-void setDimensions(struct symbol_table_t* entry, struct dimension_t* dimensions)  { entry->dimensions = (int) dimensions; }
-void setStructType(struct symbol_table_t* entry, int* structType)                 { entry->structType = (int) structType; }
+void setDimensions(struct symbol_table_t* entry, struct dimension_t* dimensions)  { entry->dimensions = dimensions; }
+void setStructType(struct symbol_table_t* entry, int* structType)                 { entry->structType = structType; }
 
 // struct table entry:
 // +----+---------+
@@ -529,15 +531,15 @@ void setStructType(struct symbol_table_t* entry, int* structType)               
 // |  3 | fields  | linked list containing all fields of a struct
 // +----+---------+
 
-int* getNextStructEntry(struct struct_table_t* entry)   { return (int*) entry->next; }
-int* getStructString(struct struct_table_t* entry)      { return (int*) entry->string; }
-int  getStructSize(struct struct_table_t* entry)        { return        entry->size; }
-int* getStructFields(struct struct_table_t* entry)      { return (int*) entry->fields; }
+struct struct_table_t* getNextStructEntry(struct struct_table_t* entry)   { return entry->next; }
+int* getStructString(struct struct_table_t* entry)                        { return entry->string; }
+int  getStructSize(struct struct_table_t* entry)                          { return entry->size; }
+struct field_t* getStructFields(struct struct_table_t* entry)             { return entry->fields; }
 
-void setNextStructEntry(struct struct_table_t* entry, struct struct_table_t* next)    { entry->next = (int) next; }
-void setStructString(struct struct_table_t* entry, int* string)                       { entry->string = (int) string; }
+void setNextStructEntry(struct struct_table_t* entry, struct struct_table_t* next)    { entry->next = next; }
+void setStructString(struct struct_table_t* entry, int* string)                       { entry->string = string; }
 void setStructSize(struct struct_table_t* entry, int size)                            { entry->size = size; }
-void setStructFields(struct struct_table_t* entry, int* fields)                       { entry->fields = (int) fields; }
+void setStructFields(struct struct_table_t* entry, struct field_t* fields)            { entry->fields = fields; }
 
 // dimension size table entry:
 // +----+---------+
@@ -545,32 +547,32 @@ void setStructFields(struct struct_table_t* entry, int* fields)                 
 // |  1 | size    | size of the dimension
 // +----+---------+
 
-int* getNextDimEntry(struct dimension_t* entry)   { return (int*) entry->next; }
-int  getDimSize(struct dimension_t* entry)        { return entry->size; }
+struct dimension_t* getNextDimEntry(struct dimension_t* entry)   { return entry->next; }
+int  getDimSize(struct dimension_t* entry)                       { return entry->size; }
 
-void setNextDimEntry(struct dimension_t* entry, struct dimension_t* next)  { entry->next = (int) next; }
+void setNextDimEntry(struct dimension_t* entry, struct dimension_t* next)  { entry->next = next; }
 void setDimSize(struct dimension_t* entry, int dimSize)                    { entry->size = dimSize; }
 
 // field table entry:
 // +----+---------+
 // |  0 | next    | pointer to next entry
 // |  1 | string  | identifier string
-// |  2 | type    | INT_T, INTSTAR_T, VOID_T, STRUCT_T
+// |  2 | type    | INT_T, INTSTAR_T, VOID_T, ARRAY_T, struct types
 // |  3 | size    | sum of all fields of a struct in words
 // |  4 | dim     | dimensions table for size of each dimension
 // +----+---------+
 
-int* getNextFieldEntry(struct field_t* entry)  { return (int*) entry->next; }
-int* getFieldString(struct field_t* entry)     { return (int*) entry->string; }
-int  getFieldType(struct field_t* entry)       { return        entry->type; }
-int  getFieldSize(struct field_t* entry)       { return        entry->size; }
-int* getFieldDimensions(struct field_t* entry) { return (int*) entry->dimensions; }
+struct field_t* getNextFieldEntry(struct field_t* entry)      { return entry->next; }
+int* getFieldString(struct field_t* entry)                    { return entry->string; }
+int  getFieldType(struct field_t* entry)                      { return entry->type; }
+int  getFieldSize(struct field_t* entry)                      { return entry->size; }
+struct dimension_t* getFieldDimensions(struct field_t* entry) { return entry->dimensions; }
 
-void setNextFieldEntry(struct field_t* entry, struct field_t* next)              { entry->next = (int) next; }
-void setFieldString(struct field_t* entry, int* string)                          { entry->string = (int) string; }
+void setNextFieldEntry(struct field_t* entry, struct field_t* next)              { entry->next = next; }
+void setFieldString(struct field_t* entry, int* string)                          { entry->string = string; }
 void setFieldType(struct field_t* entry, int type)                               { entry->type = type; }
 void setFieldSize(struct field_t* entry, int size)                               { entry->size = size; }
-void setFieldDimensions(struct field_t* entry, struct dimension_t* dimensions)   { entry->dimensions = (int) dimensions; }
+void setFieldDimensions(struct field_t* entry, struct dimension_t* dimensions)   { entry->dimensions = dimensions; }
 
 
 // type table entry:
@@ -580,13 +582,13 @@ void setFieldDimensions(struct field_t* entry, struct dimension_t* dimensions)  
 // | 2 | string  | name of type
 // +----+---------+
 
-int* getNextTypeEntry(struct type_t* entry)     { return (int*) entry->next; }
-int  getTypeID(struct type_t* entry)            { return        entry->id; }
-int* getTypeString(struct type_t* entry)        { return (int*) entry->string; }
+struct type_t* getNextTypeEntry(struct type_t* entry)     { return entry->next; }
+int  getTypeID(struct type_t* entry)                      { return entry->id; }
+int* getTypeString(struct type_t* entry)                  { return entry->string; }
 
-void setNextTypeEntry(struct type_t* entry, struct type_t* next)    { entry->next = (int) next; }
+void setNextTypeEntry(struct type_t* entry, struct type_t* next)    { entry->next = next; }
 void setTypeID(struct type_t* entry, int id)                        { entry->id = id; }
-void setTypeString(struct type_t* entry, int* string)               { entry->string = (int) string; }
+void setTypeString(struct type_t* entry, int* string)               { entry->string = string; }
 
 // ------------------------ GLOBAL CONSTANTS -----------------------
 
@@ -600,8 +602,6 @@ int INT_T        = 1;
 int INTSTAR_T    = 2;
 int VOID_T       = 3;
 int ARRAY_T      = 4;
-int STRUCT_T     = 5;
-int STRUCTSTAR_T = 6;
 
 // symbol tables
 int GLOBAL_TABLE  = 1;
@@ -626,12 +626,12 @@ int numberOfTypes           = 0;
 // ------------------------- INITIALIZATION ------------------------
 
 void resetSymbolTables() {
-  global_symbol_table  = (int*) 0;
-  local_symbol_table   = (int*) 0;
-  library_symbol_table = (int*) 0;
+  global_symbol_table  = (struct symbol_table_t*) 0;
+  local_symbol_table   = (struct symbol_table_t*) 0;
+  library_symbol_table = (struct symbol_table_t*) 0;
 
-  struct_table = (int*) 0;
-  type_table = (int*) 0;
+  struct_table = (struct struct_table_t*) 0;
+  type_table = (struct type_t*) 0;
 
   initializeTypeTable();
 
@@ -668,7 +668,7 @@ void syntaxErrorUnexpected();
 void printType(int type);
 void typeWarning(int expected, int found);
 
-int* getVariable(int* variable);
+struct symbol_table_t* getVariable(int* variable);
 int  load_variable(int* variable);
 void load_integer(int value);
 void load_string(int* string);
@@ -2020,14 +2020,6 @@ void printBinary(int n, int a) {
   print(itoa(n, integer_buffer, 2, a, 0));
 }
 
-void printList(int* list) {
-  while(list != (int*) 0) {
-    printInteger(getDimSize(list));
-    println();
-    list = getNextEntry(list);
-  }
-}
-
 int roundUp(int n, int m) {
   if (n % m == 0)
     return n;
@@ -2616,10 +2608,10 @@ int maxIntegerLength(int base) {
 // ------------------------- SYMBOL TABLE --------------------------
 // -----------------------------------------------------------------
 
-void createSymbolTableEntry(int whichTable, int* string, int line, int class, int type, int value, int address, int size, int* dimensions, int* structType) {
+void createSymbolTableEntry(int whichTable, int* string, int line, int class, int type, int value, int address, int size, struct dimension_t* dimensions, int* structType) {
   struct symbol_table_t* newEntry;
 
-  newEntry = malloc(4 * SIZEOFINTSTAR + 7 * SIZEOFINT);
+  newEntry = (struct symbol_table_t*)(malloc(4 * SIZEOFINTSTAR + 7 * SIZEOFINT));
 
   setString(newEntry, string);
   setLineNumber(newEntry, line);
@@ -2655,21 +2647,21 @@ void createSymbolTableEntry(int whichTable, int* string, int line, int class, in
   }
 }
 
-int* searchSymbolTable(struct symbol_table_t* entry, int* string, int class) {
-while (entry != (int*) 0) {
+struct symbol_table_t* searchSymbolTable(struct symbol_table_t* entry, int* string, int class) {
+while (entry != (struct symbol_table_t*) 0) {
     if (stringCompare(string, getString(entry)))
       if (class == getClass(entry))
-        return (int*) entry;
+        return entry;
 
     // keep looking
     entry = getNextEntry(entry);
   }
 
-  return (int*) 0;
+  return (struct symbol_table_t*) 0;
 }
 
-int* getScopedSymbolTableEntry(int* string, int class) {
-  int* entry;
+struct symbol_table_t* getScopedSymbolTableEntry(int* string, int class) {
+  struct symbol_table_t* entry;
 
   if (class == VARIABLE)
     // local variables override global variables
@@ -2678,22 +2670,22 @@ int* getScopedSymbolTableEntry(int* string, int class) {
     // library procedures override declared or defined procedures
     entry = searchSymbolTable(library_symbol_table, string, PROCEDURE);
   else
-    entry = (int*) 0;
+    entry = (struct symbol_table_t*) 0;
 
-  if (entry == (int*) 0)
+  if (entry == (struct symbol_table_t*) 0)
     return searchSymbolTable(global_symbol_table, string, class);
   else
     return entry;
 }
 
 int isUndefinedProcedure(int* entry) {
-  int* libraryEntry;
+  struct symbol_table_t* libraryEntry;
 
   if (getClass(entry) == PROCEDURE) {
     // library procedures override declared or defined procedures
     libraryEntry = searchSymbolTable(library_symbol_table, getString(entry), PROCEDURE);
 
-    if (libraryEntry != (int*) 0)
+    if (libraryEntry != (struct symbol_table_t*) 0)
       // procedure is library procedure
       return 0;
     else if (getAddress(entry) == 0)
@@ -2709,13 +2701,13 @@ int isUndefinedProcedure(int* entry) {
 
 int reportUndefinedProcedures() {
   int undefined;
-  int* entry;
+  struct symbol_table_t* entry;
 
   undefined = 0;
 
   entry = global_symbol_table;
 
-  while (entry != (int*) 0) {
+  while (entry != (struct symbol_table_t*) 0) {
     if (isUndefinedProcedure(entry)) {
       undefined = 1;
 
@@ -2733,23 +2725,23 @@ int reportUndefinedProcedures() {
   return undefined;
 }
 
-int* createDimTableEntry(struct dimension_t* table, int size) {
+struct dimension_t* createDimTableEntry(struct dimension_t* table, int size) {
   struct dimension_t* newEntry;
   struct dimension_t* temp;
 
-  newEntry = malloc(SIZEOFINTSTAR + SIZEOFINT);
+  newEntry = (struct dimension_t*)(malloc(SIZEOFINTSTAR + SIZEOFINT));
 
-  setNextDimEntry(newEntry, (int*) 0);
+  setNextDimEntry(newEntry, (struct dimension_t*) 0);
   setDimSize(newEntry, size);
 
-  if (table == (int*) 0) {
+  if (table == (struct dimension_t*) 0) {
     table = newEntry;
     return table;
   }
 
   temp = table;
 
-  while (getNextDimEntry(temp) != (int*) 0) {
+  while (getNextDimEntry(temp) != (struct dimension_t*) 0) {
     temp = getNextDimEntry(temp);
   }
   setNextDimEntry(temp, newEntry);
@@ -2757,25 +2749,25 @@ int* createDimTableEntry(struct dimension_t* table, int size) {
   return table;
 }
 
-int* createStructTableEntry(struct struct_table_t* table, int* string, int size, int* fields) {
+struct struct_table_t* createStructTableEntry(struct struct_table_t* table, int* string, int size, int* fields) {
   struct struct_table_t* newEntry;
   struct struct_table_t* temp;
 
-  newEntry = malloc(3 * SIZEOFINTSTAR + SIZEOFINT);
+  newEntry = (struct struct_table_t*)(malloc(3 * SIZEOFINTSTAR + SIZEOFINT));
 
-  setNextStructEntry(newEntry, (int*) 0);
+  setNextStructEntry(newEntry, (struct struct_table_t*) 0);
   setStructString(newEntry, string);
   setStructSize(newEntry, size);
   setStructFields(newEntry, fields);
 
-  if (table == (int*) 0) {
+  if (table == (struct struct_table_t*) 0) {
     table = newEntry;
     return table;
   }
 
   temp = table;
 
-  while (getNextStructEntry(temp) != (int*) 0) {
+  while (getNextStructEntry(temp) != (struct struct_table_t*) 0) {
     temp = getNextStructEntry(temp);
   }
   setNextStructEntry(temp, newEntry);
@@ -2783,26 +2775,26 @@ int* createStructTableEntry(struct struct_table_t* table, int* string, int size,
   return table;
 }
 
-int* createFieldTableEntry(struct field_t* table, int* string, int type, int size, int* dim) {
+struct field_t* createFieldTableEntry(struct field_t* table, int* string, int type, int size, int* dim) {
   struct field_t* newEntry;
   struct field_t* temp;
 
-  newEntry = malloc(3 * SIZEOFINTSTAR + 2* SIZEOFINT);
+  newEntry = (struct field_t*)(malloc(3 * SIZEOFINTSTAR + 2* SIZEOFINT));
 
-  setNextFieldEntry(newEntry, (int*) 0);
+  setNextFieldEntry(newEntry, (struct field_t*) 0);
   setFieldString(newEntry, string);
   setFieldType(newEntry, type);
   setFieldSize(newEntry, size);
   setFieldDimensions(newEntry, dim);
 
-  if (table == (int*) 0) {
+  if (table == (struct field_t*) 0) {
     table = newEntry;
     return table;
   }
 
   temp = table;
 
-  while (getNextFieldEntry(temp) != (int*) 0) {
+  while (getNextFieldEntry(temp) != (struct field_t*) 0) {
     temp = getNextFieldEntry(temp);
   }
   setNextFieldEntry(temp, newEntry);
@@ -2810,24 +2802,24 @@ int* createFieldTableEntry(struct field_t* table, int* string, int type, int siz
   return table;
 }
 
-int* createTypeTableEntry(struct type_t* table, int id, int* string) {
+struct type_t* createTypeTableEntry(struct type_t* table, int id, int* string) {
   struct type_t* newEntry;
   struct type_t* temp;
 
-  newEntry = malloc(SIZEOFINT + 2* SIZEOFINTSTAR);
+  newEntry = (struct type_t*)(malloc(SIZEOFINT + 2* SIZEOFINTSTAR));
 
-  setNextTypeEntry(newEntry, (int*) 0);
+  setNextTypeEntry(newEntry, (struct type_t*) 0);
   setTypeID(newEntry, id);
   setTypeString(newEntry, string);
 
-  if (table == (int*) 0) {
+  if (table == (struct type_t*) 0) {
     table = newEntry;
     return table;
   }
 
   temp = table;
 
-  while (getNextTypeEntry(temp) != (int*) 0) {
+  while (getNextTypeEntry(temp) != (struct type_t*) 0) {
     temp = getNextTypeEntry(temp);
   }
   setNextTypeEntry(temp, newEntry);
@@ -2835,41 +2827,41 @@ int* createTypeTableEntry(struct type_t* table, int id, int* string) {
   return table;
 }
 
-int* searchStructTable(struct struct_table_t* entry, int* string) {
-  while (entry != (int*) 0) {
+struct struct_table_t* searchStructTable(struct struct_table_t* entry, int* string) {
+  while (entry != (struct struct_table_t*) 0) {
     if (stringCompare(string, getStructString(entry)))
       return entry;
 
     // keep looking
     entry = getNextStructEntry(entry);
   }
-  return (int*) 0;
+  return (struct struct_table_t*) 0;
 }
 
-int* searchFieldTable(struct field_t* entry, int* string) {
-  while (entry != (int*) 0) {
+struct field_t* searchFieldTable(struct field_t* entry, int* string) {
+  while (entry != (struct field_t*) 0) {
     if (stringCompare(string, getFieldString(entry)))
       return entry;
 
     // keep looking
     entry = getNextFieldEntry(entry);
   }
-  return (int*) 0;
+  return (struct field_t*) 0;
 }
 
-int* searchTypeTable(struct type_t* entry, int* string) {
-  while (entry != (int*) 0) {
+struct type_t* searchTypeTable(struct type_t* entry, int* string) {
+  while (entry != (struct type_t*) 0) {
     if (stringCompare(string, getTypeString(entry)))
       return entry;
 
     // keep looking
     entry = getNextTypeEntry(entry);
   }
-  return (int*) 0;
+  return (struct type_t*) 0;
 }
 
 int* getTypeName(struct type_t* entry, int id) {
-  while (entry != (int*) 0) {
+  while (entry != (struct type_t*) 0) {
     if (getTypeID(entry) == id)
       return getTypeString(entry);
 
@@ -2886,7 +2878,7 @@ int getFieldOffset(struct struct_table_t* entry, int* name) {
   size = 0;
   fields = getStructFields(entry);
 
-  while (fields != (int*) 0) {
+  while (fields != (struct field_t*) 0) {
     if (stringCompare(name, getFieldString(fields)))
       return size;
 
@@ -2904,32 +2896,6 @@ void initializeTypeTable() {
   type_table = createTypeTableEntry(type_table, 4, "array");
 
   numberOfTypes = 4;
-}
-
-void updateStructs(struct struct_table_t* table) {
-  struct struct_table_t* entry;
-  struct field_t* fields;
-  int type;
-
-  entry = table;
-
-  print(getStructString(entry));
-  println();
-
-  while (entry != (int*) 0) {
-    fields = getStructFields(entry);
-    while (fields != (int*) 0) {
-      print(getFieldString(fields));
-      println();
-      if (getFieldType(fields) == 0) {
-        printInteger(searchTypeTable(type_table, "int"));
-        println();
-        setFieldType(fields, getTypeID(searchTypeTable(type_table, getFieldString(fields))));
-      }
-      fields = getNextFieldEntry(fields);
-    }
-    entry = getNextStructEntry(entry);
-  }
 }
 
 // -----------------------------------------------------------------
@@ -3206,12 +3172,12 @@ void typeWarning(int expected, int found) {
   println();
 }
 
-int* getVariable(int* variable) {
-  int* entry;
+struct symbol_table_t* getVariable(int* variable) {
+  struct symbol_table_t* entry;
 
   entry = getScopedSymbolTableEntry(variable, VARIABLE);
 
-  if (entry == (int*) 0) {
+  if (entry == (struct symbol_table_t*) 0) {
     printLineNumber((int*) "error", lineNumber);
     print(variable);
     print((int*) " undeclared");
@@ -3224,7 +3190,7 @@ int* getVariable(int* variable) {
 }
 
 int load_variable(int* variable) {
-  int* entry;
+  struct symbol_table_t* entry;
 
   entry = getVariable(variable);
 
@@ -3368,7 +3334,7 @@ void help_procedure_epilogue(int parameters) {
 }
 
 int gr_call(int* procedure) {
-  int* entry;
+  struct symbol_table_t* entry;
   int numberOfTemporaries;
   int type;
 
@@ -3440,12 +3406,14 @@ int gr_factor() {
   int hasCast;
   int cast;
   int type;
-  int* entry;
+  struct symbol_table_t* entry;
   int* fieldName;
   int size;
   int* structType;
   int* variableOrProcedureName;
-  int* dimensions;
+  struct dimension_t* dimensions;
+  struct struct_table_t* structEntry;
+  struct field_t* fieldEntry;
 
   // assert: n = allocatedTemporaries
 
@@ -3471,6 +3439,22 @@ int gr_factor() {
       hasCast = 1;
 
       cast = gr_type();
+
+      if (symbol == SYM_RPARENTHESIS)
+        getSymbol();
+      else
+        syntaxErrorSymbol(SYM_RPARENTHESIS);
+
+
+    } else if (symbol == SYM_STRUCT) {
+      hasCast = 1;
+      getSymbol();
+      cast = getTypeID(searchTypeTable(type_table, identifier));
+      getSymbol();
+      if (symbol == SYM_ASTERISK)
+        getSymbol();
+      else
+        syntaxErrorSymbol(SYM_ASTERISK);
 
       if (symbol == SYM_RPARENTHESIS)
         getSymbol();
@@ -3572,21 +3556,21 @@ int gr_factor() {
         if (symbol == SYM_IDENTIFIER) {
 
           fieldName = identifier;
-          entry = searchStructTable(struct_table, structType);
-          size = getFieldOffset(entry, fieldName) * WORDSIZE;
+          structEntry = searchStructTable(struct_table, structType);
+          size = getFieldOffset(structEntry, fieldName) * WORDSIZE;
 
           getSymbol();
 
           load_variable(variableOrProcedureName);
           emitIFormat(OP_ADDIU, currentTemporary(), currentTemporary(), size);
 
-          type = getFieldType(searchFieldTable(getStructFields(entry), fieldName));
+          type = getFieldType(searchFieldTable(getStructFields(structEntry), fieldName));
 
           if (symbol == SYM_LBRACKET) {
 
-            entry = getStructFields(entry);
-            entry = searchFieldTable(entry, fieldName);
-            dimensions = getFieldDimensions(entry);
+            fieldEntry = getStructFields(structEntry);
+            fieldEntry = searchFieldTable(fieldEntry, fieldName);
+            dimensions = getFieldDimensions(fieldEntry);
             load_indexOffset(dimensions);
             emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_ADDU);
             tfree(1);
@@ -4136,14 +4120,16 @@ void gr_statement() {
   int ltype;
   int rtype;
   int* variableOrProcedureName;
-  int* entry;
+  struct symbol_table_t* entry;
   int isArray;
   int* structType;
   int size;
   int* fieldName;
   int isStruct;
-  int* dimensions;
+  struct dimension_t* dimensions;
   int fieldType;
+  struct struct_table_t* structEntry;
+  struct field_t* fieldEntry;
 
   structType = (int*) 0;
   isArray = 0;
@@ -4265,18 +4251,18 @@ void gr_statement() {
 
         getSymbol();
 
-        entry = searchStructTable(struct_table, structType);
-        size = getFieldOffset(entry, fieldName) * WORDSIZE;
-        fieldType = getFieldType(searchFieldTable(getStructFields(entry), fieldName));
+        structEntry = searchStructTable(struct_table, structType);
+        size = getFieldOffset(structEntry, fieldName) * WORDSIZE;
+        fieldType = getFieldType(searchFieldTable(getStructFields(structEntry), fieldName));
 
         load_variable(variableOrProcedureName);
         emitIFormat(OP_ADDIU, currentTemporary(), currentTemporary(), size);
 
         if (symbol == SYM_LBRACKET) {
 
-          entry = getStructFields(entry);
-          entry = searchFieldTable(entry, fieldName);
-          dimensions = getFieldDimensions(entry);
+          structEntry = getStructFields(structEntry);
+          fieldEntry = searchFieldTable(fieldEntry, fieldName);
+          dimensions = getFieldDimensions(fieldEntry);
           load_indexOffset(dimensions);
           emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_ADDU);
           tfree(1);
@@ -4393,7 +4379,7 @@ int gr_type() {
   } else if (symbol == SYM_STRUCT) {
     getSymbol();
 
-    type = STRUCT_T;
+    type = 0;
   } else
     syntaxErrorSymbol(SYM_INT);
 
@@ -4403,7 +4389,7 @@ int gr_type() {
 void gr_variable(int offset) {
   int type;
   int dimSize;
-  int* dimensions;
+  struct dimension_t* dimensions;
   int* structType;
 
   dimensions = (int*) 0;
@@ -4461,6 +4447,15 @@ int gr_initialization(int type) {
       getSymbol();
 
       cast = gr_type();
+
+      if (cast == 0) {
+        type = getTypeID(searchTypeTable(type_table, identifier));
+        getSymbol();
+        if (symbol == SYM_ASTERISK)
+          getSymbol();
+        else
+          syntaxErrorSymbol(SYM_ASTERISK);
+      }
 
       if (symbol == SYM_RPARENTHESIS)
         getSymbol();
@@ -4520,7 +4515,7 @@ void gr_procedure(int* procedure, int type) {
   int numberOfParameters;
   int parameters;
   int localVariables;
-  int* entry;
+  struct symbol_table_t* entry;
 
   // assuming procedure is undefined
   isUndefined = 1;
@@ -4674,9 +4669,9 @@ void gr_cstar() {
   int* variableOrProcedureName;
   int currentLineNumber;
   int initialValue;
-  int* entry;
+  struct symbol_table_t* entry;
   int size;
-  int* dimensions;
+  struct dimension_t* dimensions;
   int dimSize;
   int* structType;
 
@@ -4763,8 +4758,9 @@ void gr_cstar() {
 
             }
 
-          } else
-            syntaxErrorSymbol(SYM_SEMICOLON);
+          } else if (symbol == SYM_LPARENTHESIS) {
+            gr_procedure(variableOrProcedureName, type);
+          }
 
         } else
           syntaxErrorSymbol(SYM_IDENTIFIER);
@@ -4865,16 +4861,16 @@ void load_indexOffset(int* dimensions) {
 }
 
 int* gr_struct(int* structName) {
-  int* fieldTable;
+  struct field_t* fieldTable;
   int fieldSize;
   int type;
   int* fieldName;
-  int* fieldDimensions;
+  struct dimension_t* fieldDimensions;
   int structSize;
   int dimSize;
 
-  fieldTable = (int*) 0;
-  fieldDimensions = (int*) 0;
+  fieldTable = (struct field_t*) 0;
+  fieldDimensions = (struct dimension_t*) 0;
   structSize = 0;
 
   while (symbol != SYM_RBRACE) {
@@ -4904,11 +4900,12 @@ int* gr_struct(int* structName) {
 
         if (symbol == SYM_IDENTIFIER) {
 
-          if (searchTypeTable(type_table, fieldName) != 0) {
+          if (searchTypeTable(type_table, fieldName) != (int*) 0) {
             type = getTypeID(searchTypeTable(type_table, fieldName));
           } else {
             numberOfTypes = numberOfTypes + 1;
             type_table = createTypeTableEntry(type_table, numberOfTypes, fieldName);
+            type = numberOfTypes;
           }
 
           fieldName = identifier;
