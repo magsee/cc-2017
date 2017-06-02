@@ -331,6 +331,7 @@ int SYM_STRUCT       = 35; // struct
 int SYM_RARROW       = 36; // ->
 int SYM_LOGICALAND   = 37; // &&
 int SYM_LOGICALOR    = 38; // ||
+int SYM_LOGICALNOT   = 39; // !
 
 int* SYMBOLS; // strings representing symbols
 
@@ -367,7 +368,7 @@ int  sourceFD   = 0;        // file descriptor of open source file
 // ------------------------- INITIALIZATION ------------------------
 
 void initScanner () {
-  SYMBOLS = malloc(39 * SIZEOFINTSTAR);
+  SYMBOLS = malloc(40 * SIZEOFINTSTAR);
 
   *(SYMBOLS + SYM_IDENTIFIER)   = (int) "identifier";
   *(SYMBOLS + SYM_INTEGER)      = (int) "integer";
@@ -408,6 +409,7 @@ void initScanner () {
   *(SYMBOLS + SYM_RARROW)       = (int) "->";
   *(SYMBOLS + SYM_LOGICALAND)   = (int) "&&";
   *(SYMBOLS + SYM_LOGICALOR)    = (int) "||";
+  *(SYMBOLS + SYM_LOGICALNOT)    = (int) "!";
 
   character = CHAR_EOF;
   symbol    = SYM_EOF;
@@ -2543,12 +2545,11 @@ void getSymbol() {
       } else if (character == CHAR_EXCLAMATION) {
         getCharacter();
 
-        if (character == CHAR_EQUAL)
+        if (character == CHAR_EQUAL) {
           getCharacter();
-        else
-          syntaxErrorCharacter(CHAR_EQUAL);
-
-        symbol = SYM_NOTEQ;
+          symbol = SYM_NOTEQ;
+        } else
+          symbol = SYM_LOGICALNOT;
 
       } else if (character == CHAR_PERCENTAGE) {
         getCharacter();
@@ -3428,6 +3429,7 @@ int gr_call(int* procedure) {
 int gr_factor() {
   int hasCast;
   int cast;
+  int isNegated;
   int type;
   struct symbol_table_t* entry;
   int* fieldName;
@@ -3441,8 +3443,14 @@ int gr_factor() {
   // assert: n = allocatedTemporaries
 
   hasCast = 0;
+  isNegated = 0;
 
   type = INT_T;
+
+  if (symbol == SYM_LOGICALNOT) {
+    getSymbol();
+    isNegated = 1;
+  }
 
   while (lookForFactor()) {
     syntaxErrorUnexpected();
@@ -3494,6 +3502,13 @@ int gr_factor() {
         syntaxErrorSymbol(SYM_RPARENTHESIS);
 
       // assert: allocatedTemporaries == n + 1
+
+      if (isNegated) {
+        emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 4);
+        emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
+        emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 2);
+        emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 1);
+      }
 
       return type;
     }
@@ -3651,6 +3666,13 @@ int gr_factor() {
     syntaxErrorUnexpected();
 
   // assert: allocatedTemporaries == n + 1
+
+  if (isNegated) {
+    emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 4);
+    emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
+    emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 2);
+    emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 1);
+  }
 
   if (hasCast)
     return cast;
