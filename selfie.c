@@ -2217,16 +2217,8 @@ int findNextCharacter() {
 
 int isCharacterLetter() {
   // ASCII codes for lower- and uppercase letters are in contiguous intervals
-  if (character >= 'a')
-    if (character <= 'z')
-      return 1;
-    else
-      return 0;
-  else if (character >= 'A')
-    if (character <= 'Z')
-      return 1;
-    else
-      return 0;
+  if (character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z')
+    return 1;
   else
     return 0;
 }
@@ -2260,22 +2252,14 @@ int isCharacterDigit(int base) {
 }
 
 int isCharacterLetterOrDigitOrUnderscore() {
-  if (isCharacterLetter())
-    return 1;
-  else if (isCharacterDigit(10))
-    return 1;
-  else if (character == CHAR_UNDERSCORE)
+  if (isCharacterLetter() || character >= '0' && character <= '9' || character == CHAR_UNDERSCORE)
     return 1;
   else
     return 0;
 }
 
 int isCharacterNotDoubleQuoteOrNewLineOrEOF() {
-  if (character == CHAR_DOUBLEQUOTE)
-    return 0;
-  else if (isCharacterNewLine())
-    return 0;
-  else if (character == CHAR_EOF)
+  if (character == CHAR_DOUBLEQUOTE || character == CHAR_LF || character == CHAR_CR || character == CHAR_EOF)
     return 0;
   else
     return 1;
@@ -3970,6 +3954,8 @@ int gr_expression() {
   int ltype;
   int operatorSymbol;
   int rtype;
+  int brFrom;
+  int brTo;
 
   ltype = gr_bitwiseExpression();
 
@@ -3978,18 +3964,23 @@ int gr_expression() {
 
     getSymbol();
 
-    rtype = gr_bitwiseExpression();
+    brFrom = binaryLength;
 
     if (operatorSymbol == SYM_LOGICALAND) {
 
+      emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 0);
+      rtype = gr_bitwiseExpression();
       emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_AND);
 
     } else if (operatorSymbol == SYM_LOGICALOR) {
 
+      emitIFormat(OP_BNE, REG_ZR, currentTemporary(), 0);
+      rtype = gr_bitwiseExpression();
       emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_OR);
 
     }
     tfree(1);
+    fixup_relative(brFrom);
   }
 
   return ltype;
