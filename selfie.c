@@ -659,7 +659,6 @@ int isLshiftOrRshift();
 int isComparison();
 int isANDorOR();
 int isIntOrStruct();
-int isBooleanOperator();
 
 int lookForFactor();
 int lookForStatement();
@@ -689,6 +688,7 @@ int  gr_simpleExpression();
 int  gr_shiftExpression();
 int  gr_comparisonExpression();
 int  gr_bitwiseExpression();
+int  gr_andExpression();
 int  gr_expression();
 void gr_while();
 void gr_if();
@@ -2227,27 +2227,22 @@ int isCharacterDigit(int base) {
   // ASCII codes for digits are in a contiguous interval
 
   if (base == 2) {
-    if (character >= '0')
-      if (character <= '1')
-        return 1;
-    return 0;
-  } else if (base == 8) {
-  if (character >= '0')
-    if (character <= '7')
+    if (character >= '0' && character <= '1')
       return 1;
     return 0;
+  } else if (base == 8) {
+    if (character >= '0' && character <= '7')
+      return 1;
+    return 0;
+  } else if (base == 10) {
+    if (character >= '0' && character <= '9')
+      return 1;
+    return 0;
+  } else if (base == 16) {
+    if ((character >= '0' && character <= '9') || (character >= 'A' && character <= 'F'))
+     return 1;
+    return 0;
   } else
-    if (character >= '0')
-      if (character <= '9')
-        return 1;
-    else {
-      if (base == 16)
-        if (character >= 'A')
-          if (character <= 'F')
-            return 1;
-      return 0;
-    }
-  else
     return 0;
 }
 
@@ -3001,16 +2996,6 @@ int isIntOrStruct() {
   else
     return 0;
 }
-
-int isBooleanOperator() {
-  if (symbol == SYM_LOGICALAND)
-    return 1;
-  else if (symbol == SYM_LOGICALOR)
-    return 1;
-  else
-    return 0;
-}
-
 
 int lookForFactor() {
   if (symbol == SYM_LPARENTHESIS)
@@ -3950,36 +3935,46 @@ int gr_bitwiseExpression() {
   return ltype;
 }
 
-int gr_expression() {
+int gr_andExpression() {
   int ltype;
-  int operatorSymbol;
   int rtype;
   int brFrom;
-  int brTo;
 
   ltype = gr_bitwiseExpression();
 
-  while (isBooleanOperator()) {
-    operatorSymbol = symbol;
-
+  while (symbol == SYM_LOGICALAND) {
     getSymbol();
 
     brFrom = binaryLength;
 
-    if (operatorSymbol == SYM_LOGICALAND) {
-
-      emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 0);
-      rtype = gr_bitwiseExpression();
-      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_AND);
-
-    } else if (operatorSymbol == SYM_LOGICALOR) {
-
-      emitIFormat(OP_BNE, REG_ZR, currentTemporary(), 0);
-      rtype = gr_bitwiseExpression();
-      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_OR);
-
-    }
+    emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 0);
+    rtype = gr_bitwiseExpression();
+    emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_AND);
     tfree(1);
+
+    fixup_relative(brFrom);
+  }
+
+  return ltype;
+}
+
+int gr_expression() {
+  int ltype;
+  int rtype;
+  int brFrom;
+
+  ltype = gr_andExpression();
+
+  while (symbol == SYM_LOGICALOR) {
+    getSymbol();
+
+    brFrom = binaryLength;
+
+    emitIFormat(OP_BNE, REG_ZR, currentTemporary(), 0);
+    rtype = gr_andExpression();
+    emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_OR);
+    tfree(1);
+
     fixup_relative(brFrom);
   }
 
@@ -5148,9 +5143,7 @@ void selfie_compile() {
   emitMap();
 
   while (link) {
-    if (numberOfRemainingArguments() == 0)
-      link = 0;
-    else if (loadCharacter(peekArgument(), 0) == '-')
+    if (!numberOfRemainingArguments() || loadCharacter(peekArgument(), 0) == '-')
       link = 0;
     else {
       sourceName = getArgument();
@@ -5227,7 +5220,7 @@ void selfie_compile() {
     }
   }
 
-  if (numberOfSourceFiles == 0) {
+  if (!numberOfSourceFiles) {
     print(selfieName);
     print((int*) ": nothing to compile, only library generated");
     println();
@@ -5415,7 +5408,7 @@ void decodeJFormat() {
 void decode() {
   opcode = getOpcode(ir);
 
-  if (opcode == 0)
+  if (!opcode)
     decodeRFormat();
   else if (opcode == OP_JAL)
     decodeJFormat();
@@ -6049,13 +6042,7 @@ int down_loadString(int* table, int vaddr, int* s) {
 
         *(s + i) = loadPhysicalMemory(paddr);
 
-        if (loadCharacter(paddr, 0) == 0)
-          return 1;
-        else if (loadCharacter(paddr, 1) == 0)
-          return 1;
-        else if (loadCharacter(paddr, 2) == 0)
-          return 1;
-        else if (loadCharacter(paddr, 3) == 0)
+        if (!loadCharacter(paddr, 0) || !loadCharacter(paddr, 1) || !loadCharacter(paddr, 2) || !loadCharacter(paddr, 3))
           return 1;
 
         vaddr = vaddr + WORDSIZE;
@@ -6063,7 +6050,7 @@ int down_loadString(int* table, int vaddr, int* s) {
         i = i + 1;
       } else {
         if (debug_open) {
-          print(binaryName);
+          print(selfieName);
           print((int*) ": opening file with name at virtual address ");
           printHexadecimal(vaddr, 8);
           print((int*) " failed because the address is unmapped");
@@ -6072,7 +6059,7 @@ int down_loadString(int* table, int vaddr, int* s) {
       }
     } else {
       if (debug_open) {
-        print(binaryName);
+        print(selfieName);
         print((int*) ": opening file with name at virtual address ");
         printHexadecimal(vaddr, 8);
         print((int*) " failed because the address is invalid");
