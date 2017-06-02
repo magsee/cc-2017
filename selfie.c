@@ -686,8 +686,8 @@ int  gr_term();
 int  gr_simpleExpression();
 int  gr_shiftExpression();
 int  gr_comparisonExpression();
+int  gr_bitwiseExpression();
 int  gr_expression();
-int  gr_booleanExpression();
 void gr_while();
 void gr_if();
 void gr_return();
@@ -3914,7 +3914,7 @@ int  gr_comparisonExpression(){
   return ltype;
 }
 
-int gr_expression() {
+int gr_bitwiseExpression() {
   int ltype;
   int operatorSymbol;
   int rtype;
@@ -3944,44 +3944,30 @@ int gr_expression() {
   return ltype;
 }
 
-int gr_booleanExpression() {
+int gr_expression() {
   int ltype;
   int operatorSymbol;
   int rtype;
 
-  ltype = gr_expression();
+  ltype = gr_bitwiseExpression();
 
-  if (isBooleanOperator()) {
+  while (isBooleanOperator()) {
     operatorSymbol = symbol;
 
     getSymbol();
 
-    rtype = gr_expression();
+    rtype = gr_bitwiseExpression();
 
     if (operatorSymbol == SYM_LOGICALAND) {
 
-      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_SUBU);
-
-      tfree(1);
-
-      emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 4);
-      emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
-      emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 2);
-      emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 1);
+      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_AND);
 
     } else if (operatorSymbol == SYM_LOGICALOR) {
 
-      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_ADDU);
-
-      tfree(1);
-
-      emitIFormat(OP_BNE, REG_ZR, currentTemporary(), 4);
-      emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
-      emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 2);
-      emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 1);
+      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), 0, FCT_OR);
 
     }
-
+    tfree(1);
   }
 
   return ltype;
@@ -4004,18 +3990,14 @@ void gr_while() {
     if (symbol == SYM_LPARENTHESIS) {
       getSymbol();
 
-      while (symbol != SYM_RPARENTHESIS) {
+      gr_expression();
 
-        gr_booleanExpression();
+      // do not know where to branch, fixup later
+      brForwardToEnd = binaryLength;
 
-        // do not know where to branch, fixup later
-        brForwardToEnd = binaryLength;
+      emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 0);
 
-        emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 0);
-
-        tfree(1);
-
-      }
+      tfree(1);
 
       if (symbol == SYM_RPARENTHESIS) {
         getSymbol();
@@ -7791,7 +7773,7 @@ void execute() {
     else if (function == FCT_OR)
       fct_or();
     else if (function == FCT_NOT)
-     fct_not();
+      fct_not();
     else
       throwException(EXCEPTION_UNKNOWNINSTRUCTION, 0);
   } else if (opcode == OP_ADDIU)
