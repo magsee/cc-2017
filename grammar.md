@@ -57,7 +57,11 @@ call                 = identifier "(" [ expression { "," expression } ] ")" .
 
 selector             =  { "[" simpleExpression "]" }
 
-expression           = comparisonExpression { ( "&" | "|" ) comparisonExpression }
+expression           = andExpression { "||" andExpression } .
+
+andExpression        = bitwiseExpression { "&&" bitwiseExpression } .
+
+bitwiseExpression    = comparisonExpression { ( "&" | "|" ) comparisonExpression } .
 
 comparisonExpression = shiftExpression [ ( "==" | "!=" | "<" | ">" | "<=" | ">=" ) shiftExpression ] .
 
